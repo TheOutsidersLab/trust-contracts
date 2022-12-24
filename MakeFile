@@ -1,0 +1,8 @@
+#!make
+include .env
+
+
+#--------------DEPLOY----------------#
+
+deploy:
+	npx hardhat deploy --network $(DEPLOY_NETWORK)
