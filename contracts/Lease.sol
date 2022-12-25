@@ -7,9 +7,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IexecRateOracle} from './IexecRateOracle.sol';
 import {FakeIexecRateOracle} from './FakeIexecOracle.sol';
 import {ERC721A} from "./libs/ERC721A.sol";
-import {TenantId} from "./TenantId.sol";
-import {OwnerId} from "./OwnerId.sol";
-import "hardhat/console.sol";
+import {TrustId} from "./TrustId.sol";
+
 
 /**
  * @title Lease
@@ -137,16 +136,14 @@ contract Lease {
 
     //    string[] public availableCurrency = ['CRYPTO', 'USD', 'EUR'];
 
-    OwnerId ownerContract;
-    TenantId tenantContract;
+    TrustId trustIdContract;
     //    FakeIexecOracle rateOracle;
     IexecRateOracle rateOracle;
 
 
-    constructor (address _ownerContract, address _tenantContract, address _rateOracle) {
+    constructor (address _trustIdContract, address _rateOracle) {
         _tokenIds.increment();
-        ownerContract = OwnerId(_ownerContract);
-        tenantContract = TenantId(_tenantContract);
+        trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);
     }
@@ -187,13 +184,13 @@ contract Lease {
         string calldata _currencyPair,
         uint256 _startDate) external onlyTrustOwner
     {
-        require(ownerContract.getOwnerIdFromAddress(msg.sender) != 0, "Lease: You are not an owner");
-        //        require(tenantContract.ownerOf(_tenantId) != address(0));
-        require(tenantContract.getTenant(_tenantId).id != 0, "Lease: Tenant does not exist");
-        require(tenantContract.tenantHasLease(_tenantId) == false, "Lease: Tenant already has a lease");
+        // Duplicate check
+        //        require(trustIdContract.userIsOwner(msg.sender) == true, "Lease: You are not an owner");
+        require(trustIdContract.getUser(_tenantId).id != 0, "Lease: Tenant does not exist");
+        require(trustIdContract.userHasLease(_tenantId) == false, "Lease: Tenant already has a lease");
 
         Lease storage lease = leases[_tokenIds.current()];
-        lease.ownerId = ownerContract.getOwnerIdFromAddress(msg.sender);
+        lease.ownerId = trustIdContract.getUserId(msg.sender);
         lease.tenantId = _tenantId;
         lease.paymentData.rentAmount = _rentAmount;
         lease.totalNumberOfRents = _totalNumberOfRents;
@@ -222,7 +219,7 @@ contract Lease {
      */
     function updateLeaseMetaData(uint256 _leaseId, string memory _newCid) external {
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == tenantContract.ownerOf(lease.tenantId),
+        require(msg.sender == trustIdContract.ownerOf(lease.tenantId),
             "Only the tenant can call this function");
         require(bytes(_newCid).length > 0, "Should provide a valid IPFS URI");
 
@@ -238,8 +235,8 @@ contract Lease {
      */
     function declineLease(uint256 _leaseId) external {
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == tenantContract.ownerOf(lease.tenantId)
-            || msg.sender == ownerContract.ownerOf(lease.ownerId),
+        require(msg.sender == trustIdContract.ownerOf(lease.tenantId)
+            || msg.sender == trustIdContract.ownerOf(lease.ownerId),
             "Only the tenant or Owner can call this function");
 
         lease.status = LeaseStatus.CANCELLED;
@@ -254,11 +251,11 @@ contract Lease {
     function validateLease(uint256 _leaseId) external {
         Lease storage lease = leases[_leaseId];
         require(lease.ownerId != 0, "Lease does not exist");
-        require(msg.sender == tenantContract.ownerOf(lease.tenantId),
+        require(msg.sender == trustIdContract.ownerOf(lease.tenantId),
             "Only the tenant can call this function");
         require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
 
-        tenantContract.updateHasLease(lease.tenantId, true);
+        trustIdContract.updateHasLease(lease.tenantId, true);
         lease.status = LeaseStatus.ACTIVE;
 
         emit LeaseValidated(_leaseId);
@@ -292,7 +289,7 @@ contract Lease {
 
         //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
-        address ownerAddress = tenantContract.ownerOf(lease.tenantId);
+        address ownerAddress = trustIdContract.ownerOf(lease.tenantId);
         require(ownerAddress == msg.sender, "Only the tenant can perform this action");
 
         RentPayment storage rentPayment = lease.rentPayments[_rentId];
@@ -323,7 +320,7 @@ contract Lease {
         Lease storage lease = leases[_leaseId];
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
-        require(tenantContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
+        require(trustIdContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
 
         RentPayment storage rentPayment = lease.rentPayments[_rentId];
 
@@ -338,7 +335,7 @@ contract Lease {
 
 
         //Need allowance to Lease contract before executing this function
-        token.transferFrom(msg.sender, ownerContract.ownerOf(lease.ownerId), _amount);
+        token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amount);
 
         _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -358,7 +355,7 @@ contract Lease {
         rateOracle.updateRate(lease.paymentData.currencyPair);
 
         //        require(lease.paymentData.exchangeRate != 'CRYPTO', "Lease: Rent is not set to fiat");
-        address ownerAddress = tenantContract.ownerOf(lease.tenantId);
+        address ownerAddress = trustIdContract.ownerOf(lease.tenantId);
         require(ownerAddress == msg.sender, "Only the tenant can perform this action");
 
         RentPayment storage rentPayment = lease.rentPayments[_rentId];
@@ -399,7 +396,7 @@ contract Lease {
 
         //        require(lease.paymentData.exchangeRate != 'CRYPTO', "Lease: Rent is not set to fiat");
 
-        require(tenantContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
+        require(trustIdContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
 
         RentPayment storage rentPayment = lease.rentPayments[_rentId];
 
@@ -420,7 +417,7 @@ contract Lease {
 
         require(_amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / 10000), "Wrong rent value");
 
-        token.transferFrom(msg.sender, ownerContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
+        token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
 
         _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -436,7 +433,7 @@ contract Lease {
      */
     function markRentAsNotPaid(uint256 _leaseId, uint256 _rentId) external {
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == ownerContract.ownerOf(lease.ownerId), "Only the owner can call this function");
+        require(msg.sender == trustIdContract.ownerOf(lease.ownerId), "Only the owner can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         require(block.timestamp > lease.startDate + lease.rentPaymentLimitTime * _rentId, "Tenant still has time to pay");
 
@@ -459,7 +456,7 @@ contract Lease {
     function markRentAsPending(uint256 _leaseId, uint256 _rentId) external {
         Lease storage lease = leases[_leaseId];
         RentPayment storage rentPayment = lease.rentPayments[_rentId];
-        require(msg.sender == ownerContract.ownerOf(lease.ownerId), "Only the owner can call this function");
+        require(msg.sender == trustIdContract.ownerOf(lease.ownerId), "Only the owner can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         require(rentPayment.paymentStatus == PaymentStatus.NOT_PAID, "Payment must be set to NOT_PAID");
 
@@ -478,10 +475,10 @@ contract Lease {
         Lease storage lease = leases[_leaseId];
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        if(msg.sender == ownerContract.ownerOf(lease.ownerId)) {
+        if(msg.sender == trustIdContract.ownerOf(lease.ownerId)) {
             require(lease.cancellation.cancelledByOwner == false, "Lease already cancelled by owner");
             lease.cancellation.cancelledByOwner = true;
-        } else if (msg.sender == tenantContract.ownerOf(lease.tenantId)) {
+        } else if (msg.sender == trustIdContract.ownerOf(lease.tenantId)) {
             require(lease.cancellation.cancelledByTenant == false, "Lease already cancelled by tenant");
             lease.cancellation.cancelledByTenant = true;
         } else {
@@ -510,12 +507,12 @@ contract Lease {
     function reviewLease(uint256 _leaseId, string calldata _reviewUri) external {
         Lease storage lease = leases[_leaseId];
         require(lease.status == LeaseStatus.ENDED, "Lease: Lease is still not finished");
-        if(msg.sender == tenantContract.ownerOf(lease.tenantId)) {
+        if(msg.sender == trustIdContract.ownerOf(lease.tenantId)) {
             require(!lease.reviewStatus.tenantReviewed, "Lease: Tenant already reviewed");
             lease.reviewStatus.tenantReviewUri = _reviewUri;
             lease.reviewStatus.tenantReviewed = true;
             emit LeaseReviewedByTenant(_leaseId, _reviewUri);
-        } else if(msg.sender == ownerContract.ownerOf(lease.ownerId)) {
+        } else if(msg.sender == trustIdContract.ownerOf(lease.ownerId)) {
             require(!lease.reviewStatus.ownerReviewed, "Lease: Owner already reviewed");
             lease.reviewStatus.ownerReviewUri = _reviewUri;
             lease.reviewStatus.ownerReviewed = true;
@@ -568,7 +565,7 @@ contract Lease {
             }
         }
         lease.status = LeaseStatus.ENDED;
-        tenantContract.updateHasLease(lease.tenantId, false);
+        trustIdContract.updateHasLease(lease.tenantId, false);
 
         emit UpdateLeaseStatus(_leaseId, lease.status);
     }
@@ -612,7 +609,8 @@ contract Lease {
     // =========================== Modifiers ==============================
 
     modifier onlyTrustOwner() {
-        require(ownerContract.balanceOf(msg.sender) != 0,
+        uint256 userId = trustIdContract.getUserId(msg.sender);
+        require(trustIdContract.userIsOwner(userId) == true,
             "Only an owner can call this function");
         _;
     }
