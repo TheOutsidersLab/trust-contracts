@@ -187,7 +187,6 @@ contract Lease {
         // Duplicate check
         //        require(trustIdContract.userIsOwner(msg.sender) == true, "Lease: You are not an owner");
         require(trustIdContract.getUser(_tenantId).id != 0, "Lease: Tenant does not exist");
-        require(trustIdContract.userHasLease(_tenantId) == false, "Lease: Tenant already has a lease");
 
         Lease storage lease = leases[_tokenIds.current()];
         lease.ownerId = trustIdContract.getUserId(msg.sender);
@@ -244,15 +243,17 @@ contract Lease {
         emit UpdateLeaseStatus(_leaseId, LeaseStatus.CANCELLED);
     }
 
+
     /**
      * @notice Called by the tenant to validate the lease
      * @param _leaseId The id of the lease
      */
     function validateLease(uint256 _leaseId) external {
         Lease storage lease = leases[_leaseId];
+
         require(lease.ownerId != 0, "Lease does not exist");
-        require(msg.sender == trustIdContract.ownerOf(lease.tenantId),
-            "Only the tenant can call this function");
+        require(msg.sender == trustIdContract.ownerOf(lease.tenantId), "Only the tenant can call this function");
+        require(trustIdContract.userHasLease(lease.tenantId) == false, "Tenant already has an active lease");
         require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
 
         trustIdContract.updateHasLease(lease.tenantId, true);
