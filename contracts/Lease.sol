@@ -253,10 +253,8 @@ contract Lease {
 
         require(lease.ownerId != 0, "Lease does not exist");
         require(msg.sender == trustIdContract.ownerOf(lease.tenantId), "Only the tenant can call this function");
-        require(trustIdContract.userHasLease(lease.tenantId) == false, "Tenant already has an active lease");
         require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
 
-        trustIdContract.updateHasLease(lease.tenantId, true);
         lease.status = LeaseStatus.ACTIVE;
 
         emit LeaseValidated(_leaseId);
@@ -566,7 +564,6 @@ contract Lease {
             }
         }
         lease.status = LeaseStatus.ENDED;
-        trustIdContract.updateHasLease(lease.tenantId, false);
 
         emit UpdateLeaseStatus(_leaseId, lease.status);
     }
