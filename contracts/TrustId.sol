@@ -16,12 +16,10 @@ contract TrustId is ERC721A, Ownable {
     /// @notice User information struct
     /// @param profileId the id of the profile
     /// @param handle the handle of the profile
-    /// @param isOwner true is user is the owner of a property
     /// @param dataUri the IPFS URI of the profile metadata
     struct TrustUser {
         uint256 id;
         string handle;
-        bool isOwner;
         string dataUri;
     }
 
@@ -56,11 +54,6 @@ contract TrustId is ERC721A, Ownable {
     function getUser(uint256 _userId) external view returns (TrustUser memory) {
         require(_exists(_userId), "UserId: Profile does not exist");
         return users[_userId];
-    }
-
-    function userIsOwner(uint256 _userId) external view returns (bool isOwner) {
-        require(_exists(_userId), "UserId: Profile does not exist");
-        return users[_userId].isOwner;
     }
 
     /**
@@ -115,19 +108,6 @@ contract TrustId is ERC721A, Ownable {
         users[_tokenId].dataUri = _newCid;
 
         emit CidUpdated(_tokenId, _newCid);
-    }
-
-    //TODO Réfléchir à comment gérer ce param. Prix pour l'activer ? On ne peut pas le désactiver ?
-    /**
-     * @notice Update the user 'isOwner' prop.
-     * @param _tokenId Token ID to update
-     */
-    function updateIsOwner(uint256 _tokenId) external {
-        require(ownerOf(_tokenId) == msg.sender);
-        require(_exists(_tokenId), "UserId: This user does not exist");
-        users[_tokenId].isOwner = true;
-
-        emit UserIsOwner(_tokenId);
     }
 
     /**
@@ -270,12 +250,6 @@ contract TrustId is ERC721A, Ownable {
      * @param _newCid Content ID
      */
     event CidUpdated(uint256 indexed _tokenId, string _newCid);
-
-    /**
-     * Emit when the user registers as an owner.
-     * @param tokenId User Id ID for the user
-     */
-    event UserIsOwner(uint256 tokenId);
 
 
     // =========================== Modifiers ==============================

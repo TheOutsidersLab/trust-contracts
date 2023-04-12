@@ -182,10 +182,8 @@ contract Lease {
         uint256 _rentPaymentInterval,
         uint256 _rentPaymentLimitTime,
         string calldata _currencyPair,
-        uint256 _startDate) external onlyTrustOwner
+        uint256 _startDate) external
     {
-        // Duplicate check
-        //        require(trustIdContract.userIsOwner(msg.sender) == true, "Lease: You are not an owner");
         require(trustIdContract.getUser(_tenantId).id != 0, "Lease: Tenant does not exist");
 
         Lease storage lease = leases[_tokenIds.current()];
@@ -606,11 +604,5 @@ contract Lease {
 
     // =========================== Modifiers ==============================
 
-    modifier onlyTrustOwner() {
-        uint256 userId = trustIdContract.getUserId(msg.sender);
-        require(trustIdContract.userIsOwner(userId) == true,
-            "Only an owner can call this function");
-        _;
-    }
 
 }
