@@ -16,13 +16,11 @@ contract TrustId is ERC721A, Ownable {
     /// @notice User information struct
     /// @param profileId the id of the profile
     /// @param handle the handle of the profile
-    /// @param hasLease true is user is already in a lease
     /// @param isOwner true is user is the owner of a property
     /// @param dataUri the IPFS URI of the profile metadata
     struct TrustUser {
         uint256 id;
         string handle;
-        bool hasLease;
         bool isOwner;
         string dataUri;
     }
@@ -58,11 +56,6 @@ contract TrustId is ERC721A, Ownable {
     function getUser(uint256 _userId) external view returns (TrustUser memory) {
         require(_exists(_userId), "UserId: Profile does not exist");
         return users[_userId];
-    }
-
-    function userHasLease(uint256 _userId) external view returns (bool hasLease) {
-        require(_exists(_userId), "UserId: Profile does not exist");
-        return users[_userId].hasLease;
     }
 
     function userIsOwner(uint256 _userId) external view returns (bool isOwner) {
@@ -124,19 +117,6 @@ contract TrustId is ERC721A, Ownable {
         emit CidUpdated(_tokenId, _newCid);
     }
 
-    /**
-     * @notice Update the user 'hasLease' prop.
-     * @dev Only the Lease contract can update this status
-     * @param _tokenId Token ID to update
-     * @param _hasLease True is user is already in a lease
-     */
-    function updateHasLease(uint256 _tokenId, bool _hasLease) external onlyLeaseContract {
-        require(_exists(_tokenId), "UserId: This user does not exist");
-        users[_tokenId].hasLease = _hasLease;
-
-        emit UserHasLeaseUpdated(_tokenId, _hasLease);
-    }
-
     //TODO Réfléchir à comment gérer ce param. Prix pour l'activer ? On ne peut pas le désactiver ?
     /**
      * @notice Update the user 'isOwner' prop.
@@ -157,7 +137,6 @@ contract TrustId is ERC721A, Ownable {
     function isValid(uint256 _userId) external view {
         require(_userId > 0 && _userId <= totalSupply(), "Not a valid User ID");
     }
-
 
 
     // =========================== Owner functions ==============================
@@ -291,13 +270,6 @@ contract TrustId is ERC721A, Ownable {
      * @param _newCid Content ID
      */
     event CidUpdated(uint256 indexed _tokenId, string _newCid);
-
-    /**
-     * Emit when the user's lease status changes.
-     * @param tokenId User Id ID for the user
-     * @param hasLease True if user is on lease, false otherwise
-     */
-    event UserHasLeaseUpdated(uint256 tokenId, bool hasLease);
 
     /**
      * Emit when the user registers as an owner.
