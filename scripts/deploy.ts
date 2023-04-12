@@ -79,29 +79,17 @@ task("deploy", "Deploys contracts")
     let deployerUserId = trustIdContract.getUserId(deployer.address);
     console.log('TheBoss userId: ', await deployerUserId)
 
-    const mintTxDeployerOwner = await trustIdContract.connect(deployer).updateIsOwner(deployerUserId);
-    await mintTxDeployerOwner.wait();
-    console.log('TheBoss isOwner: ', await trustIdContract.userIsOwner(deployerUserId));
-
 
     const mintTxCroesusUser = await trustIdContract.connect(croesus).mint('Croesus');
     await mintTxCroesusUser.wait();
     let croesusUserId = trustIdContract.getUserId(croesus.address);
     console.log('Croesus userId: ', await croesusUserId)
 
-    const mintTxCroesusOwner = await trustIdContract.connect(croesus).updateIsOwner(croesusUserId);
-    await mintTxCroesusOwner.wait();
-    console.log('Croesus isOwner: ', await trustIdContract.userIsOwner(croesusUserId));
-
 
     const mintTxBrutusUser = await trustIdContract.connect(brutus).mint('Brutus');
     await mintTxBrutusUser.wait();
     let brutusUserId = trustIdContract.getUserId(brutus.address);
     console.log('Brutus userId: ', await brutusUserId)
-
-    const mintTxBrutusOwner = await trustIdContract.connect(brutus).updateIsOwner(brutusUserId);
-    await mintTxBrutusOwner.wait();
-    console.log('Brutus isOwner: ', await trustIdContract.userIsOwner(brutusUserId));
 
 
     const mintTxMaximusUser = await trustIdContract.connect(maximus).mint('Maximus');
