@@ -3,20 +3,30 @@ pragma solidity ^0.8.9;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
-import {ERC721A} from "./libs/ERC721A.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title Trust ID
  * @notice This contracts allows users to create a unique ID for themselves.
- * @author Quentin DC @ Starton Hackathon 2022
+ * @author Quentin DC
  */
-contract TrustId is ERC721A, Ownable {
+contract TrustId is ERC721, Ownable {
+    using Counters for Counters.Counter;
+
+    /**
+     * @notice Profile Id counter
+     */
+    Counters.Counter nextProfileId;
+
     // =========================== Structs ==============================
 
-    /// @notice User information struct
-    /// @param profileId the id of the profile
-    /// @param handle the handle of the profile
-    /// @param dataUri the IPFS URI of the profile metadata
+    /**
+     * @notice User information struct
+     * @param profileId the id of the profile
+     * @param handle the handle of the profile
+     * @param dataUri the IPFS URI of the profile metadata
+     */
     struct TrustUser {
         uint256 id;
         string handle;
@@ -28,72 +38,76 @@ contract TrustId is ERC721A, Ownable {
     /// Taken handles
     mapping(string => bool) public takenHandles;
 
-    /// Token ID to Profile struct
-    mapping(uint256 => TrustUser) public users;
+    /**
+     * @notice Token ID to Profile struct
+     */
+    mapping(uint256 => TrustUser) public profiles;
+
+    /**
+     * @notice Address to Trust id
+     */
+    mapping(address => uint256) public ids;
 
     /**
      * @notice The address of the lease contract
      */
     address private leastContractAddress;
 
-    /**
-     */
-    constructor() ERC721A("UserId", "TID") {}
+
+    // =========================== Errors ==============================
+
+
+    // =========================== Initializers ==============================
+
+
+    constructor() ERC721("UserId", "TID") {
+        // Increment counter to start profile ids at index 1
+        nextProfileId.increment();
+    }
 
     // =========================== View functions ==============================
 
     /**
-     * Allows retrieval of number of minted IDs for a user.
-     * @param _user Address of the owner of the user Id
-     * @return the number of tokens minted by the user
+     * @dev Returns the total number of tokens in existence.
      */
-    function numberMinted(address _user) public view returns (uint256) {
-        return balanceOf(_user);
-    }
-
-    function getUser(uint256 _userId) external view returns (TrustUser memory) {
-        require(_exists(_userId), "UserId: Profile does not exist");
-        return users[_userId];
+    function totalSupply() public view returns (uint256) {
+        return nextProfileId.current() - 1;
     }
 
     /**
-     * Allows getting the UserId of one address
-     * @param _userAddress Address to check
-     * @return uint256 the id of the NFT
+     * @notice Check whether a Trust ID is valid.
+     * @param _profileId The Trust ID to check
      */
-    function getUserId(address _userAddress) public view returns (uint256) {
-        uint256 ownedTokenId;
-        uint256 currentTokenId = _startTokenId();
-        address latestOwnerAddress;
-
-        while (currentTokenId <= totalSupply()) {
-            TokenOwnership memory ownership = _ownershipOf(currentTokenId);
-
-            if (!ownership.burned && ownership.addr != address(0)) {
-                latestOwnerAddress = ownership.addr;
-            }
-
-            if (latestOwnerAddress == _userAddress) {
-                ownedTokenId = currentTokenId;
-                break;
-            }
-
-            currentTokenId++;
-        }
-
-        return ownedTokenId;
+    function isValid(uint256 _profileId) external view {
+        require(_profileId > 0 && _profileId < nextProfileId.current(), "not valid");
     }
+
+    /**
+     * @notice get the owner of two different Id tokens
+     * @param _tokenId1 The Trust ID of the user 1
+     * @param _tokenId2 The Trust ID of the user 2
+     */
+    function ownersOf(uint256 _tokenId1, uint256 _tokenId2) external view returns (address, address) {
+        return (ownerOf(_tokenId1), ownerOf(_tokenId2));
+    }
+
+//    TRY TO GET DIRECTLY THE USER STRUCT
+//    function getUser(uint256 _userId) external view returns (TrustUser memory) {
+//        require(_exists(_userId), "UserId: Profile does not exist");
+//        return users[_userId];
+//    }
 
 
     // =========================== User functions ==============================
 
     /**
-     * Allows a user to mint a new User Id without the need of Proof of Humanity.
+     * @notice Allows a user to mint a new User Id without the need of Proof of Humanity.
      * @param _handle Handle for the user
+     * @return uint256 the id of the NFT
      */
-    function mint(string memory _handle) external canMint(_handle) {
-        _safeMint(msg.sender, 1);
-        _afterMint(_handle);
+    function mint(string memory _handle) external canMint(_handle) returns (uint256) {
+        _safeMint(msg.sender, nextProfileId.current());
+        return _afterMint(_handle);
     }
 
     /**
@@ -105,17 +119,9 @@ contract TrustId is ERC721A, Ownable {
     function updateProfileData(uint256 _tokenId, string memory _newCid) external {
         require(ownerOf(_tokenId) == msg.sender);
         require(bytes(_newCid).length > 0, "Should provide a valid IPFS URI");
-        users[_tokenId].dataUri = _newCid;
+        profiles[_tokenId].dataUri = _newCid;
 
         emit CidUpdated(_tokenId, _newCid);
-    }
-
-    /**
-     * @notice Check whether the User ID is valid.
-     * @param _userId User ID
-     */
-    function isValid(uint256 _userId) external view {
-        require(_userId > 0 && _userId <= totalSupply(), "Not a valid User ID");
     }
 
 
@@ -131,63 +137,52 @@ contract TrustId is ERC721A, Ownable {
     // =========================== Private functions ===========================
 
     /**
-     * Update handle address mapping and emit event after mint.
+     * @notice Update handle address mapping and emit event after mint.
+     * @dev Increments the nextProfileId counter.
      * @param _handle Handle for the user
+     * @return userProfileId uint256 the id of the NFT
      */
-    function _afterMint(string memory _handle) private {
-        uint256 userTokenId = _nextTokenId() - 1;
-        TrustUser storage profile = users[userTokenId];
-        profile.id = userTokenId;
+    function _afterMint(string memory _handle) private returns (uint256 userProfileId) {
+        userProfileId = nextProfileId.current();
+        nextProfileId.increment();
+        TrustUser storage profile = profiles[userProfileId];
+        profile.id = userProfileId;
         profile.handle = _handle;
         takenHandles[_handle] = true;
+        ids[msg.sender] = userProfileId;
 
-        emit Mint(msg.sender, userTokenId, _handle);
+        emit Mint(msg.sender, userProfileId, _handle);
+        return userProfileId;
     }
 
     // =========================== Internal functions ==========================
 
-    /**
-     * Update the start token id to 1
-     */
-    function _startTokenId() internal view virtual override returns (uint256) {
-        return 1;
-    }
 
     // =========================== Overrides ==============================
 
     /**
-     * @notice Ids Transfers are blocked. UserIds are SBTs.
-     * @dev Transfer functions blocked for this contract
+     * @dev Blocks the _transfer function
+     * @param from address of the sender
+     * @param to address of the receiver
+     * @param tokenId id of the token to transfer
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public virtual override(ERC721A) {
-        revert("Not allowed");
-    }
+    function _transfer(address from, address to, uint256 tokenId) internal virtual override(ERC721) {}
 
     /**
-     * @notice Ids Transfers are blocked. UserIds are SBTs.
-     * @dev Transfer functions blocked for this contract
+     * @dev Blocks the burn function
+     * @param tokenId The ID of the token
      */
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public virtual override(ERC721A) {
-        revert("Not allowed");
-    }
+    function _burn(uint256 tokenId) internal virtual override(ERC721) {}
 
     /**
-     * @notice See IERC721A.
+     * @notice See IERC721.
      */
-    function tokenURI(uint256 tokenId) public view virtual override(ERC721A) returns (string memory) {
+    function tokenURI(uint256 tokenId) public view virtual override(ERC721) returns (string memory) {
         return _buildTokenURI(tokenId);
     }
 
     function _buildTokenURI(uint256 id) internal view returns (string memory) {
-        string memory username = users[id].handle;
+        string memory username = profiles[id].handle;
 
         bytes memory image = abi.encodePacked(
             "data:image/svg+xml;base64,",
@@ -227,7 +222,7 @@ contract TrustId is ERC721A, Ownable {
      * @param _handle Handle for the user
      */
     modifier canMint(string memory _handle) {
-        require(numberMinted(msg.sender) == 0, "You already have a User Id");
+        require(balanceOf(msg.sender) == 0, "You already have a User Id");
         require(bytes(_handle).length >= 2, "Handle too short");
         require(bytes(_handle).length <= 10, "Handle too long");
         require(!takenHandles[_handle], "Handle already taken");
