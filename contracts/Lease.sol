@@ -175,6 +175,7 @@ contract Lease {
      * @param _startDate The start date of the lease
      */
     function createLease(
+        uint256 _ownerId,
         uint256 _tenantId,
         uint256 _rentAmount,
         uint8 _totalNumberOfRents,
@@ -184,10 +185,11 @@ contract Lease {
         string calldata _currencyPair,
         uint256 _startDate) external
     {
-        require(trustIdContract.getUser(_tenantId).id != 0, "Lease: Tenant does not exist");
+//        require(trustIdContract.profiles[_tenantId].id != 0, "Lease: Tenant does not exist");
 
         Lease storage lease = leases[_tokenIds.current()];
-        lease.ownerId = trustIdContract.getUserId(msg.sender);
+        lease.ownerId = _ownerId;
+//        lease.ownerId = trustIdContract.getUserId(msg.sender);
         lease.tenantId = _tenantId;
         lease.paymentData.rentAmount = _rentAmount;
         lease.totalNumberOfRents = _totalNumberOfRents;
