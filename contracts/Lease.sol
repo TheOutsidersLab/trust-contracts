@@ -216,13 +216,10 @@ contract Lease {
      * @param _leaseId The id of the lease
      * @param _newCid The new IPFS URI of the lease metadata
      */
-    function updateLeaseMetaData(uint256 _profileId, uint256 _leaseId, string memory _newCid) external {
+    function updateLeaseMetaData(uint256 _profileId, uint256 _leaseId, string memory _newCid) external onlyOwner(_profileId) {
         require(bytes(_newCid).length == 46, "Lease: Invalid cid");
 
         Lease storage lease = leases[_leaseId];
-        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-        require(bytes(_newCid).length > 0, "Lease: Should provide a valid IPFS URI");
-
         lease.metaData = _newCid;
 
         emit LeaseMetaDataUpdated(_leaseId, _newCid);
@@ -295,15 +292,15 @@ contract Lease {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
         //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-        require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         //TODO Do we keep this ?
+        require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
         require(msg.value == lease.paymentData.rentAmount, "Wrong rent value");
@@ -452,7 +449,6 @@ contract Lease {
     function markRentAsNotPaid(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external onlyOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
-//        Lease storage lease = leases[_leaseId];
         Lease memory _lease = leases[_leaseId];
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
         require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
@@ -646,7 +642,37 @@ contract Lease {
      * @param _profileId The Trust ID of the user
      */
     modifier onlyOwner(uint256 _profileId) {
-        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not owner");
+        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
+        _;
+    }
+
+    //TODO Check if this modifier is needed when payment functions are merged
+    /**
+     * @notice Restricts the actions to the tenant of the ACTIVE lease
+     * @param _profileId The Trust ID of the user
+     * @param _leaseId The ID of the lease
+     */
+    modifier tenantCheck(uint256 _profileId, uint256 _leaseId) {
+        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        _;
+    }
+
+    //TODO Check if this modifier is needed when payment functions are merged
+    /**
+     * @notice Restricts the actions to the owner of the ACTIVE lease
+     * @param _profileId The Trust ID of the user
+     * @param _leaseId The ID of the lease
+     */
+    modifier ownerCheck(uint256 _profileId, uint256 _leaseId) {
+        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.ownerId, "Lease: Only the owner can call this function");
+        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         _;
     }
 
