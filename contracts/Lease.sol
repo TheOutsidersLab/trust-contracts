@@ -6,14 +6,13 @@ import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IexecRateOracle} from './IexecRateOracle.sol';
 import {FakeIexecRateOracle} from './FakeIexecOracle.sol';
-import {ERC721A} from "./libs/ERC721A.sol";
 import {TrustId} from "./TrustId.sol";
 
 
 /**
  * @title Lease
  * @notice This contracts allows owners to create Leases & tenants to pay their rent.
- * @author Quentin DC @ Starton Hackathon 2022
+ * @author Quentin DC
  */
 //TODO add withdraw function
 //TODO ownable for updatable slippage ?
@@ -87,7 +86,7 @@ contract Lease {
     }
 
     /**
-     * @notice Struct for "multisig" cancellation. When both params are true, all pending payments are cancelled and
+     * @notice Struct for cancellation. When both params are true, all pending payments are cancelled and
      * the lease is ended
      * @param cancelledByOwner Owner cancellation signature
      * @param cancelledByTenant Tenant cancellation signature
@@ -122,7 +121,7 @@ contract Lease {
     struct RentPayment {
         uint256 validationDate;
         bool withoutIssues;
-        int256 exchangeRate;
+        uint256 exchangeRate;
         uint256 exchangeRateTimestamp;
         PaymentStatus paymentStatus;
     }
@@ -183,13 +182,10 @@ contract Lease {
         uint256 _rentPaymentInterval,
         uint256 _rentPaymentLimitTime,
         string calldata _currencyPair,
-        uint256 _startDate) external
+        uint256 _startDate) external onlyOwner(_ownerId) returns (uint256)
     {
-//        require(trustIdContract.profiles[_tenantId].id != 0, "Lease: Tenant does not exist");
-
         Lease storage lease = leases[_tokenIds.current()];
         lease.ownerId = _ownerId;
-//        lease.ownerId = trustIdContract.getUserId(msg.sender);
         lease.tenantId = _tenantId;
         lease.paymentData.rentAmount = _rentAmount;
         lease.totalNumberOfRents = _totalNumberOfRents;
@@ -208,7 +204,10 @@ contract Lease {
         emit LeaseCreated(_tokenIds.current(), _tenantId, lease.ownerId, _rentAmount, _totalNumberOfRents,
             _paymentToken, _rentPaymentInterval, _rentPaymentLimitTime, _startDate, _currencyPair);
 
+        uint256 leaseId = _tokenIds.current();
         _tokenIds.increment();
+
+        return leaseId;
     }
 
     /**
@@ -217,6 +216,7 @@ contract Lease {
      * @param _newCid The new IPFS URI of the lease metadata
      */
     function updateLeaseMetaData(uint256 _leaseId, string memory _newCid) external {
+        require(bytes(_newCid).length == 46, "Invalid cid");
         Lease storage lease = leases[_leaseId];
         require(msg.sender == trustIdContract.ownerOf(lease.tenantId),
             "Only the tenant can call this function");
@@ -237,6 +237,7 @@ contract Lease {
         require(msg.sender == trustIdContract.ownerOf(lease.tenantId)
             || msg.sender == trustIdContract.ownerOf(lease.ownerId),
             "Only the tenant or Owner can call this function");
+        require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
 
         lease.status = LeaseStatus.CANCELLED;
 
@@ -249,9 +250,9 @@ contract Lease {
      * @param _leaseId The id of the lease
      */
     function validateLease(uint256 _leaseId) external {
-        Lease storage lease = leases[_leaseId];
+        require(_leaseId <= _tokenIds.current(), "Lease does not exist");
 
-        require(lease.ownerId != 0, "Lease does not exist");
+        Lease storage lease = leases[_leaseId];
         require(msg.sender == trustIdContract.ownerOf(lease.tenantId), "Only the tenant can call this function");
         require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
 
@@ -606,5 +607,13 @@ contract Lease {
 
     // =========================== Modifiers ==============================
 
+    /**
+     * @notice Check if the msg sender is the owner of the given user ID
+     * @param _profileId The Trust ID of the user
+     */
+    modifier onlyOwner(uint256 _profileId) {
+        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Not owner");
+        _;
+    }
 
 }
