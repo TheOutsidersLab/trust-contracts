@@ -286,27 +286,29 @@ contract Lease {
 
     /**
      * @notice Used to pay a rent using ETH
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function payCryptoRentInETH(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable {
-        Lease storage lease = leases[_leaseId];
+    function payCryptoRentInETH(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
         //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
-        address ownerAddress = trustIdContract.ownerOf(lease.tenantId);
-        require(ownerAddress == msg.sender, "Only the tenant can perform this action");
 
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
+        RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
+        //TODO Do we keep this ?
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
         require(msg.value == lease.paymentData.rentAmount, "Wrong rent value");
 
-        payable (ownerAddress).transfer(msg.value);
+        payable (msg.sender).transfer(msg.value);
 
         _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -316,30 +318,35 @@ contract Lease {
 
     /**
      * @notice Used to pay a rent in token using tokens
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      * @param _amount amount in tokens
      * @dev Only the registered tenant can call this function
      */
-    function payCryptoRentInToken(uint256 _leaseId, uint256 _rentId, bool _withoutIssues, uint256 _amount) external {
-        Lease storage lease = leases[_leaseId];
+    function payCryptoRentInToken(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues, uint256 _amount) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+
+        //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
-        require(trustIdContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
-
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
+        RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
         IERC20 token = IERC20(lease.paymentData.paymentToken);
 
         require(token.balanceOf(msg.sender) >= _amount, "Not enough token balance");
-        require(_amount >= lease.paymentData.rentAmount, "Wrong rent value");
+        require(_amount == lease.paymentData.rentAmount, "Wrong rent value");
 
 
+        //TODO: Consider making an allowance for the whole lease duration in the beginning
         //Need allowance to Lease contract before executing this function
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amount);
 
@@ -351,22 +358,24 @@ contract Lease {
 
     /**
      * @notice Used to pay a rent stated in Fiat currency using tokens
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      * @dev Only the registered tenant can call this function
      */
-    function payFiatRentInEth(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable {
-        Lease storage lease = leases[_leaseId];
-        rateOracle.updateRate(lease.paymentData.currencyPair);
+    function payFiatRentInEth(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
-        //        require(lease.paymentData.exchangeRate != 'CRYPTO', "Lease: Rent is not set to fiat");
-        address ownerAddress = trustIdContract.ownerOf(lease.tenantId);
-        require(ownerAddress == msg.sender, "Only the tenant can perform this action");
+        //TODO Will be implemented when exchangeRate switched to an index
+        //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
+        RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
@@ -380,7 +389,7 @@ contract Lease {
 
         require(msg.value >= (rentAmountInWei - (rentAmountInWei * slippage) / 10000), "Wrong rent value");
 
-        payable (ownerAddress).transfer(msg.value);
+        payable (msg.sender).transfer(msg.value);
 
         _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -390,23 +399,25 @@ contract Lease {
 
     /**
      * @notice Used to pay a rent using tokens NOT IMPLEMENTED YET
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      * @param _amountInSmallestDecimal amount in smallest token decimal
      * @dev Only the registered tenant can call this function
      */
-    function payFiatRentInToken(uint256 _leaseId, uint256 _rentId, bool _withoutIssues, uint256 _amountInSmallestDecimal) external {
-        Lease storage lease = leases[_leaseId];
-        rateOracle.updateRate(lease.paymentData.currencyPair);
+    function payFiatRentInToken(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues, uint256 _amountInSmallestDecimal) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        Lease memory lease = leases[_leaseId];
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
-        //        require(lease.paymentData.exchangeRate != 'CRYPTO', "Lease: Rent is not set to fiat");
+        //TODO Will be implemented when exchangeRate switched to an index
+        //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
-        require(trustIdContract.ownerOf(lease.tenantId) == msg.sender, "Only the tenant can perform this action");
-
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
+        RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
