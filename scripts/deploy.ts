@@ -76,31 +76,31 @@ task("deploy", "Deploys contracts")
 
     const mintTxDeployerUser = await trustIdContract.connect(deployer).mint('TheBoss');
     await mintTxDeployerUser.wait();
-    let deployerUserId = trustIdContract.getUserId(deployer.address);
+    let deployerUserId = trustIdContract.ids(deployer.address);
     console.log('TheBoss userId: ', await deployerUserId)
 
 
     const mintTxCroesusUser = await trustIdContract.connect(croesus).mint('Croesus');
     await mintTxCroesusUser.wait();
-    let croesusUserId = trustIdContract.getUserId(croesus.address);
+    let croesusUserId = trustIdContract.ids(croesus.address);
     console.log('Croesus userId: ', await croesusUserId)
 
 
     const mintTxBrutusUser = await trustIdContract.connect(brutus).mint('Brutus');
     await mintTxBrutusUser.wait();
-    let brutusUserId = trustIdContract.getUserId(brutus.address);
+    let brutusUserId = trustIdContract.ids(brutus.address);
     console.log('Brutus userId: ', await brutusUserId)
 
 
     const mintTxMaximusUser = await trustIdContract.connect(maximus).mint('Maximus');
     await mintTxMaximusUser.wait();
-    let maximusUserId = trustIdContract.getUserId(maximus.address);
+    let maximusUserId = trustIdContract.ids(maximus.address);
     console.log('Maximus userId: ', await maximusUserId)
 
 
     const mintTxAureliusUser = await trustIdContract.connect(aurelius).mint('Aurelius');
     await mintTxAureliusUser.wait();
-    let aureliusUserId = trustIdContract.getUserId(aurelius.address);
+    let aureliusUserId = trustIdContract.ids(aurelius.address);
     console.log('Aurelius userId: ', await aureliusUserId)
 
 
@@ -110,7 +110,8 @@ task("deploy", "Deploys contracts")
     if (normalRent) {
       //Create lease for ETH payment
       const createLeaseTx = await leaseContract.connect(croesus).createLease(// '4',
-        await trustIdContract.getUserId(maximus.address),
+        await trustIdContract.ids(croesus.address),
+        await trustIdContract.ids(maximus.address),
         ethers.utils.parseEther('0.0000000000005'),
         '12',
         ethers.constants.AddressZero,
@@ -133,7 +134,7 @@ task("deploy", "Deploys contracts")
       // const lease = await leaseContract.leases(1)
       // console.log('Lease Declined: ', lease.status)
       //
-      // const hasLease = await tenantIdContract.userHasLease(await tenantIdContract.getUserId(carol.address));
+      // const hasLease = await tenantIdContract.userHasLease(await tenantIdContract.ids(carol.address));
       // console.log('Maximus has lease: ', hasLease);
 
       //Maximus pays 8 rents
@@ -164,7 +165,8 @@ task("deploy", "Deploys contracts")
 
       //Create token lease
       const createLeaseTx = await leaseContract.connect(croesus).createLease(// '4',
-        await trustIdContract.getUserId(aurelius.address),
+        await trustIdContract.ids(croesus.address),
+        await trustIdContract.ids(aurelius.address),
         ethers.utils.parseEther('0.0000000000005'),
         '12',
         croesusTokenAddress,
@@ -210,12 +212,13 @@ task("deploy", "Deploys contracts")
       await oracleContract.updateRate('USD-SHI');
       // const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12);
       // await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
-      const aureliusId = await trustIdContract.getUserId(aurelius.address)
+      const aureliusId = await trustIdContract.ids(aurelius.address)
       console.log('Aurelius id ', aureliusId)
 
       //Create token lease
       const createLeaseTx = await leaseContract.connect(croesus).createLease(
-        await trustIdContract.getUserId(aurelius.address),
+        await trustIdContract.ids(croesus.address),
+        await trustIdContract.ids(aurelius.address),
         "5",
         '12',
         croesusTokenAddress,
@@ -269,12 +272,13 @@ task("deploy", "Deploys contracts")
     if (fiatRentPaymentEth) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12);
       await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
-      const auralusId = await trustIdContract.getUserId(aurelius.address)
+      const auralusId = await trustIdContract.ids(aurelius.address)
       console.log('Aurelius id ', auralusId)
 
       //Create ETH lease
       const createLeaseTx = await leaseContract.connect(croesus).createLease(
-        await trustIdContract.getUserId(aurelius.address),
+        await trustIdContract.ids(croesus.address),
+        await trustIdContract.ids(aurelius.address),
         "5",
         '12',
         croesusTokenAddress,
@@ -400,9 +404,9 @@ task("deploy", "Deploys contracts")
     // const leaseEnd = await leaseContract.leases(2)
     // // console.log('Lease end: ', leaseEnd)
     //
-    // const hasLeaseEnd = await tenantIdContract.userHasLease(await tenantIdContract.getUserId(maximus.address));
+    // const hasLeaseEnd = await tenantIdContract.userHasLease(await tenantIdContract.ids(maximus.address));
     // console.log('Maximus has lease: ', hasLeaseEnd);
     //
-    // const daveHasLeaseEnd = await tenantIdContract.userHasLease(await tenantIdContract.getUserId(aurelius.address));
+    // const daveHasLeaseEnd = await tenantIdContract.userHasLease(await tenantIdContract.ids(aurelius.address));
     // console.log('Aurelius has lease: ', daveHasLeaseEnd);
   });
