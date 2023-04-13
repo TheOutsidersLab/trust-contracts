@@ -139,7 +139,7 @@ task("deploy", "Deploys contracts")
 
       //Maximus pays 8 rents
       for (let i = 0; i < 8; i++) {
-        const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(1, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
+        const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(maximusUserId,1, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
         await payRentTx.wait();
         console.log('Maximus paid rent: ', i)
       }
@@ -185,7 +185,7 @@ task("deploy", "Deploys contracts")
 
       //Aurelius pays 8 rents
       for (let i = 0; i < 8; i++) {
-        const payRentTx = await leaseContract.connect(aurelius).payCryptoRentInToken(2, i, true, ethers.utils.parseEther('0.0000000000005'));
+        const payRentTx = await leaseContract.connect(aurelius).payCryptoRentInToken(aureliusUserId,2, i, true, ethers.utils.parseEther('0.0000000000005'));
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
       }
@@ -248,7 +248,7 @@ task("deploy", "Deploys contracts")
       await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
 
       for (let i = 0; i < 8; i++) {
-        const payRentTx = await leaseContract.connect(aurelius).payFiatRentInToken(3, i, true, rentAmountInToken);
+        const payRentTx = await leaseContract.connect(aurelius).payFiatRentInToken(aureliusUserId,3, i, true, rentAmountInToken);
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
       }
@@ -305,7 +305,7 @@ task("deploy", "Deploys contracts")
       console.log('Rent amount in token: ', rentAmountInWei.toString());
 
       for (let i = 0; i < 8; i++) {
-        const payRentTx = await leaseContract.connect(aurelius).payFiatRentInEth(4, i, true, {value: rentAmountInWei});
+        const payRentTx = await leaseContract.connect(aurelius).payFiatRentInEth(aureliusUserId,4, i, true, {value: rentAmountInWei});
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
       }
@@ -328,7 +328,7 @@ task("deploy", "Deploys contracts")
     if (cancelLease) {
       //Maximus pays 4 rents
       for (let i = 0; i < 4; i++) {
-        const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(1, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
+        const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(maximusUserId,1, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
         await payRentTx.wait();
       }
 
@@ -346,7 +346,7 @@ task("deploy", "Deploys contracts")
       console.log('Payments 7 pending: ', payments[7]);
 
       //A=Maximus pays rent 7 with issues
-      const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(1, 7, false, {value: ethers.utils.parseEther('0.0000000000005')});
+      const payRentTx = await leaseContract.connect(maximus).payCryptoRentInETH(maximusUserId,1, 7, false, {value: ethers.utils.parseEther('0.0000000000005')});
       await payRentTx.wait();
       const payments2 = await leaseContract.getPayments(1);
       console.log('Payments 7 paid: ', payments2[7]);
