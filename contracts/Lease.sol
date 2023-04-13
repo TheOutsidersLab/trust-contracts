@@ -61,16 +61,16 @@ contract Lease {
     struct Lease {
         uint256 ownerId;
         uint256 tenantId;
-        PaymentData paymentData;
         uint8 totalNumberOfRents;
-        ReviewStatus reviewStatus;
         uint256 rentPaymentInterval;
         uint256 rentPaymentLimitTime;
         uint256 startDate;
+        string metaData;
+        PaymentData paymentData;
+        ReviewStatus reviewStatus;
         Cancellation cancellation;
         LeaseStatus status;
         RentPayment[] rentPayments;
-        string metaData;
     }
 
     /**
@@ -121,7 +121,7 @@ contract Lease {
     struct RentPayment {
         uint256 validationDate;
         bool withoutIssues;
-        uint256 exchangeRate;
+        int256 exchangeRate;
         uint256 exchangeRateTimestamp;
         PaymentStatus paymentStatus;
     }
@@ -212,15 +212,16 @@ contract Lease {
 
     /**
      * @notice Called by the tenant to update the lease metadata
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _newCid The new IPFS URI of the lease metadata
      */
-    function updateLeaseMetaData(uint256 _leaseId, string memory _newCid) external {
-        require(bytes(_newCid).length == 46, "Invalid cid");
+    function updateLeaseMetaData(uint256 _profileId, uint256 _leaseId, string memory _newCid) external {
+        require(bytes(_newCid).length == 46, "Lease: Invalid cid");
+
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == trustIdContract.ownerOf(lease.tenantId),
-            "Only the tenant can call this function");
-        require(bytes(_newCid).length > 0, "Should provide a valid IPFS URI");
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(bytes(_newCid).length > 0, "Lease: Should provide a valid IPFS URI");
 
         lease.metaData = _newCid;
 
@@ -230,14 +231,18 @@ contract Lease {
 
     /**
      * @notice Called by the tenant or the owner to decline the lease proposition
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      */
-    function declineLease(uint256 _leaseId) external {
+    function declineLease(uint256 _profileId, uint256 _leaseId) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == trustIdContract.ownerOf(lease.tenantId)
-            || msg.sender == trustIdContract.ownerOf(lease.ownerId),
-            "Only the tenant or Owner can call this function");
-        require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
+        require(
+            _profileId == lease.ownerId || _profileId == lease.tenantId,
+            "Lease: Not an actor of this lease"
+        );
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease was already validated");
 
         lease.status = LeaseStatus.CANCELLED;
 
@@ -247,18 +252,19 @@ contract Lease {
 
     /**
      * @notice Called by the tenant to validate the lease
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      */
-    function validateLease(uint256 _leaseId) external {
-        require(_leaseId <= _tokenIds.current(), "Lease does not exist");
+    function validateLease(uint256 _profileId, uint256 _leaseId) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
-        require(msg.sender == trustIdContract.ownerOf(lease.tenantId), "Only the tenant can call this function");
-        require(lease.status == LeaseStatus.PENDING, "Lease was already validated");
+        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease was already validated");
 
         lease.status = LeaseStatus.ACTIVE;
 
-        emit LeaseValidated(_leaseId);
+        emit UpdateLeaseStatus(_leaseId, LeaseStatus.ACTIVE);
     }
 
     // COMMENTED FOR NOW - STILL IN DISCUSSION
@@ -427,21 +433,26 @@ contract Lease {
 
     /**
      * @notice Can be called by the owner to mark a rent as not paid after the rent payment limit time is reached
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @dev Only the owner of the lease can call this function
      */
-    function markRentAsNotPaid(uint256 _leaseId, uint256 _rentId) external {
-        Lease storage lease = leases[_leaseId];
-        require(msg.sender == trustIdContract.ownerOf(lease.ownerId), "Only the owner can call this function");
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-        require(block.timestamp > lease.startDate + lease.rentPaymentLimitTime * _rentId, "Tenant still has time to pay");
+    function markRentAsNotPaid(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
+//        Lease storage lease = leases[_leaseId];
+        Lease memory _lease = leases[_leaseId];
+        require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
+        require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
+        require(block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId, "Lease: Tenant still has time to pay");
 
-        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment already has another status");
+        RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
+//        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
 
-        _mint(_leaseId, _rentId, PaymentStatus.NOT_PAID);
+        require(_rentPayment.paymentStatus == PaymentStatus.PENDING, "Lease: Payment status should be PENDING");
+
+        _updateRentStatus(_leaseId, _rentId, PaymentStatus.NOT_PAID);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit RentNotPaid(_leaseId, _rentId);
@@ -449,18 +460,24 @@ contract Lease {
 
     /**
      * @notice Can be called by the owner to set a NOT_PAID rent back to PENDING, to give the tenant a possibility to pay his rent
+     * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _rentId The id of the rent
      * @dev Only the owner of the lease can call this function for a RentPayment set to NOT_PAID
      */
-    function markRentAsPending(uint256 _leaseId, uint256 _rentId) external {
-        Lease storage lease = leases[_leaseId];
-        RentPayment storage rentPayment = lease.rentPayments[_rentId];
-        require(msg.sender == trustIdContract.ownerOf(lease.ownerId), "Only the owner can call this function");
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-        require(rentPayment.paymentStatus == PaymentStatus.NOT_PAID, "Payment must be set to NOT_PAID");
+    function markRentAsPending(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
-        _mint(_leaseId, _rentId, PaymentStatus.PENDING);
+//        Lease storage lease = leases[_leaseId];
+        Lease memory _lease = leases[_leaseId];
+        require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
+        require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
+
+//        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
+        RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
+        require(_rentPayment.paymentStatus == PaymentStatus.NOT_PAID, "Lease: Payment must be set to NOT_PAID");
+
+        _updateRentStatus(_leaseId, _rentId, PaymentStatus.PENDING);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit SetRentToPending(_leaseId, _rentId);
@@ -471,18 +488,21 @@ contract Lease {
      * @dev Both tenant and owner must call this function for the lease to be cancelled
      * @param _leaseId The id of the lease
      */
-    function cancelLease(uint256 _leaseId) external {
+    function cancelLease(uint256 _profileId, uint256 _leaseId) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease does not exist");
         Lease storage lease = leases[_leaseId];
+        require(
+            _profileId == lease.ownerId || _profileId == lease.tenantId,
+            "Lease: Not an actor of this lease"
+        );
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        if(msg.sender == trustIdContract.ownerOf(lease.ownerId)) {
+        if(_profileId == lease.ownerId) {
             require(lease.cancellation.cancelledByOwner == false, "Lease already cancelled by owner");
             lease.cancellation.cancelledByOwner = true;
-        } else if (msg.sender == trustIdContract.ownerOf(lease.tenantId)) {
+        } else {
             require(lease.cancellation.cancelledByTenant == false, "Lease already cancelled by tenant");
             lease.cancellation.cancelledByTenant = true;
-        } else {
-            revert("Only the owner or the tenant can call this function");
         }
 
         emit CancellationRequested(_leaseId, lease.cancellation.cancelledByOwner, lease.cancellation.cancelledByTenant);
@@ -491,7 +511,7 @@ contract Lease {
             for(uint8 i = 0; i < lease.totalNumberOfRents; i++) {
                 RentPayment storage rentPayment = lease.rentPayments[i];
                 if(rentPayment.paymentStatus == PaymentStatus.PENDING) {
-                    _mint(_leaseId, i, PaymentStatus.CANCELLED);
+                    _updateRentStatus(_leaseId, i, PaymentStatus.CANCELLED);
                 }
             }
             _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -504,21 +524,26 @@ contract Lease {
      * @param _reviewUri The IPFS URI of the review
      * @dev Only one review per tenant / owner. Can be called again to update the review.
      */
-    function reviewLease(uint256 _leaseId, string calldata _reviewUri) external {
+    function reviewLease(uint256 _profileId, uint256 _leaseId, string calldata _reviewUri) external onlyOwner(_profileId) {
+        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+
         Lease storage lease = leases[_leaseId];
+        require(
+            _profileId == lease.ownerId || _profileId == lease.tenantId,
+            "Lease: Not an actor of this lease"
+        );
         require(lease.status == LeaseStatus.ENDED, "Lease: Lease is still not finished");
-        if(msg.sender == trustIdContract.ownerOf(lease.tenantId)) {
+
+        if(_profileId == lease.tenantId) {
             require(!lease.reviewStatus.tenantReviewed, "Lease: Tenant already reviewed");
             lease.reviewStatus.tenantReviewUri = _reviewUri;
             lease.reviewStatus.tenantReviewed = true;
             emit LeaseReviewedByTenant(_leaseId, _reviewUri);
-        } else if(msg.sender == trustIdContract.ownerOf(lease.ownerId)) {
+        } else {
             require(!lease.reviewStatus.ownerReviewed, "Lease: Owner already reviewed");
             lease.reviewStatus.ownerReviewUri = _reviewUri;
             lease.reviewStatus.ownerReviewed = true;
             emit LeaseReviewedByOwner(_leaseId, _reviewUri);
-        } else {
-            revert("You are not allowed to review this lease");
         }
     }
 
@@ -544,12 +569,13 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _paymentStatus The new payment status
      */
-    function _mint(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus) private {
+    function _updateRentStatus(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus) private {
         RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = _paymentStatus;
         rentPayment.validationDate = block.timestamp;
     }
 
+    //TODO: Check if this function can be gas-optimized
     /**
      * @notice Private function checking whether the lease is ended or not
      * @param _leaseId The id of the lease
@@ -583,8 +609,6 @@ contract Lease {
         uint256 startDate,
         string currencyPair);
 
-    event LeaseValidated(uint256 leaseId);
-
     event RentPaymentIssueStatusUpdated(uint256 leaseId, uint256 rentId, bool withoutIssues);
 
     event CryptoRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount);
@@ -612,7 +636,7 @@ contract Lease {
      * @param _profileId The Trust ID of the user
      */
     modifier onlyOwner(uint256 _profileId) {
-        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Not owner");
+        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not owner");
         _;
     }
 
