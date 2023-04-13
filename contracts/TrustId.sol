@@ -91,12 +91,6 @@ contract TrustId is ERC721, Ownable {
         return (ownerOf(_tokenId1), ownerOf(_tokenId2));
     }
 
-//    TRY TO GET DIRECTLY THE USER STRUCT
-//    function getUser(uint256 _userId) external view returns (TrustUser memory) {
-//        require(_exists(_userId), "UserId: Profile does not exist");
-//        return users[_userId];
-//    }
-
 
     // =========================== User functions ==============================
 
