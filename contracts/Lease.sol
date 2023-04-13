@@ -308,7 +308,7 @@ contract Lease {
 
         payable (ownerAddress).transfer(msg.value);
 
-        _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
+        _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, msg.value);
@@ -343,7 +343,7 @@ contract Lease {
         //Need allowance to Lease contract before executing this function
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amount);
 
-        _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
+        _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, _amount);
@@ -382,7 +382,7 @@ contract Lease {
 
         payable (ownerAddress).transfer(msg.value);
 
-        _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
+        _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, msg.value, exchangeRate, date);
@@ -425,7 +425,7 @@ contract Lease {
 
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
 
-        _mintFromTenant(_leaseId, _rentId, PaymentStatus.PAID, _withoutIssues);
+        _payRent(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
@@ -553,12 +553,11 @@ contract Lease {
      * @notice Private function to update the payment status & potential issues of a rent payment
      * @param _leaseId The id of the lease
      * @param _rentId The rent payment id
-     * @param _paymentStatus The new payment status
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function _mintFromTenant(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus, bool _withoutIssues) private {
+    function _payRent(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
         RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
-        rentPayment.paymentStatus = _paymentStatus;
+        rentPayment.paymentStatus = PaymentStatus.PAID;
         rentPayment.withoutIssues = _withoutIssues;
         rentPayment.validationDate = block.timestamp;
     }
