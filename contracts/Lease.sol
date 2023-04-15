@@ -118,23 +118,18 @@ contract Lease {
      * @notice Struct for a proposal
      * @param ownerId The id of the profile
      * @param totalNumberOfRents The amount of rent payments for the lease
-     * @param rentPaymentInterval The minimum interval between each rent payment
-     * @param rentPaymentLimitTime The minimum interval to mark a rent payment as not paid
      * @param startDate The start date of the lease
-     * @param rentAmount Amount of the rent
-     * @param paymentToken Token in which the rent will be paid
-     * @param currencyPair CRYPTO if rent is in crypto. Otherwise fiat currency available in list.
      * @param metaData Metadata of the proposal
      */
     struct Proposal {
         uint256 ownerId;
         uint8 totalNumberOfRents;
-        uint256 rentPaymentInterval;
-        uint256 rentPaymentLimitTime;
+//        uint256 rentPaymentInterval;
+//        uint256 rentPaymentLimitTime;
         uint256 startDate;
-        uint256 rentAmount;
-        address paymentToken;
-        string currencyPair;
+//        uint256 rentAmount;
+//        address paymentToken;
+//        string currencyPair;
         string metaData;
     }
 
@@ -184,6 +179,16 @@ contract Lease {
     function getPayments(uint256 _leaseId) external view returns (RentPayment[] memory rentPayments) {
         Lease storage lease = leases[_leaseId];
         return lease.rentPayments;
+    }
+
+    /**
+     * @notice Getter for a proposal
+     * @param _leaseId The id of the lease
+     * @param _ownerId The id of the proposal's owner
+     * @return proposal The proposal
+     */
+    function getProposal(uint256 _leaseId, uint256 _ownerId) external view returns (Proposal memory proposal) {
+        return proposals[_leaseId][_ownerId];
     }
 
     // =========================== User functions ==============================
@@ -239,6 +244,7 @@ contract Lease {
             _rentPaymentLimitTime,
             _startDate,
             _currencyPair
+//            "cid"
         );
 
         uint256 leaseId = _tokenIds.current();
@@ -265,6 +271,7 @@ contract Lease {
         uint256 _rentPaymentLimitTime,
         string calldata _currencyPair,
         uint256 _startDate
+//        string calldata _metaData
     ) external onlyTrustOwner(_profileId) returns (uint256) {
         Lease storage lease = leases[_tokenIds.current()];
         lease.ownerId = _profileId;
@@ -276,6 +283,7 @@ contract Lease {
         lease.rentPaymentInterval = _rentPaymentInterval;
         lease.rentPaymentLimitTime = _rentPaymentLimitTime;
         lease.startDate = _startDate;
+//        lease.metaData = _metaData;
         lease.status = LeaseStatus.PENDING;
 
         emit LeaseCreated(
@@ -289,6 +297,7 @@ contract Lease {
             _rentPaymentLimitTime,
             _startDate,
             _currencyPair
+//            _metaData
         );
 
         uint256 leaseId = _tokenIds.current();
@@ -302,24 +311,14 @@ contract Lease {
      * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
      * @param _totalNumberOfRents The amount of rent payments for the lease
-     * @param _rentPaymentLimitTime The minimum interval to mark a rent payment as not paid
-     * @param _rentPaymentInterval The minimum interval between each rent payment
      * @param _startDate The start date of the lease
-     * @param _rentAmount The amount of the rent in fiat
-     * @param _paymentToken The address of the token used for payment
-     * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
      * @param _cid The cid of the metadata
      */
     function submitProposal(
         uint256 _profileId,
         uint256 _leaseId,
         uint8 _totalNumberOfRents,
-        uint256 _rentPaymentInterval,
-        uint256 _rentPaymentLimitTime,
         uint256 _startDate,
-        uint256 _rentAmount,
-        address _paymentToken,
-        string calldata _currencyPair,
         string calldata _cid
     ) external onlyTrustOwner(_profileId) {
         _validateProposal(_leaseId, _profileId, _cid);
@@ -327,12 +326,7 @@ contract Lease {
         proposals[_leaseId][_profileId] = Proposal({
             ownerId: _profileId,
             totalNumberOfRents: _totalNumberOfRents,
-            rentPaymentInterval: _rentPaymentInterval,
-            rentPaymentLimitTime: _rentPaymentLimitTime,
             startDate: _startDate,
-            rentAmount: _rentAmount,
-            paymentToken: _paymentToken,
-            currencyPair :_currencyPair,
             metaData: _cid
         });
 
@@ -340,31 +334,21 @@ contract Lease {
             _leaseId,
             _profileId,
             _totalNumberOfRents,
-            _rentPaymentInterval,
-            _rentPaymentLimitTime,
             _startDate,
-            _rentAmount,
-            _paymentToken,
-            _currencyPair,
             _cid
         );
     }
 
 
-    function validateProposal(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
+    function validateProposal(uint256 _profileId, uint256 _tenantId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
         Lease storage lease = leases[_leaseId];
         require(lease.ownerId == _profileId, "Lease: Only owner can validate proposal");
         require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not open");
 
-        Proposal memory proposal = proposals[_leaseId][_profileId];
+        Proposal memory proposal = proposals[_leaseId][_tenantId];
 
         lease.tenantId = proposal.ownerId;
-        lease.paymentData.rentAmount = proposal.rentAmount;
         lease.totalNumberOfRents = proposal.totalNumberOfRents;
-        lease.paymentData.paymentToken = proposal.paymentToken;
-        lease.paymentData.currencyPair = proposal.currencyPair;
-        lease.rentPaymentInterval = proposal.rentPaymentInterval;
-        lease.rentPaymentLimitTime = proposal.rentPaymentLimitTime;
         lease.startDate = proposal.startDate;
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
@@ -372,20 +356,21 @@ contract Lease {
             lease.rentPayments.push(RentPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
-        lease.status = LeaseStatus.PENDING;
+        lease.status = LeaseStatus.ACTIVE;
 
-        emit LeaseCreated(
-            _leaseId,
-            proposal.ownerId,
-            lease.ownerId,
-            proposal.rentAmount,
-            proposal.totalNumberOfRents,
-            proposal.paymentToken,
-            proposal.rentPaymentInterval,
-            proposal.rentPaymentLimitTime,
-            proposal.startDate,
-            proposal.currencyPair
-        );
+        //TODO need leaseUpdated event
+//        emit LeaseCreated(
+//            _leaseId,
+//            proposal.ownerId,
+//            lease.ownerId,
+//            proposal.rentAmount,
+//            proposal.totalNumberOfRents,
+//            proposal.paymentToken,
+//            proposal.rentPaymentInterval,
+//            proposal.rentPaymentLimitTime,
+//            proposal.startDate,
+//            proposal.currencyPair
+//        );
     }
 
     function updateProposal() external {}
@@ -811,18 +796,14 @@ contract Lease {
         uint256 rentPaymentLimitTime,
         uint256 startDate,
         string currencyPair
+//        string metadata
     );
 
     event ProposalSubmitted(
         uint256 leaseId,
         uint256 tenantId,
         uint8 totalNumberOfRents,
-        uint256 rentPaymentInterval,
-        uint256 rentPaymentLimitTime,
         uint256 startDate,
-        uint256 rentAmount,
-        address paymentToken,
-        string currencyPair,
         string metaData
     );
 
