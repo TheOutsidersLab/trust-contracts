@@ -2,16 +2,15 @@ import {task} from "hardhat/config";
 import {ethers} from "hardhat";
 import {getCurrentTimestamp} from "hardhat/internal/hardhat-network/provider/utils/getCurrentTimestamp";
 
-// npx hardhat deploy --fiat-rent-payment-eth --fiat-rent-payment-token --normal-rent --normal-token-rent --network localhost
+// npx hardhat deploy --fiat-rent-payment-eth --fiat-rent-payment-token --crypto-rent --network localhost
 task("deploy", "Deploys contracts")
-  .addFlag('normalRent', 'Rents paid & not paid in ETH')
+  .addFlag('cryptoRent', 'Rents paid & not paid in ETH')
   .addFlag('alreadyDeployed', 'If contracts already deployed')
-  .addFlag('normalTokenRent', 'Rents paid & not paid in token')
   .addFlag('fiatRentPaymentToken', 'Rents in fiat payment in token')
   .addFlag('fiatRentPaymentEth', 'Rents in fiat payment in token')
   .addFlag('cancelLease', 'Rents paid & not paid & lease is cancelled')
   .setAction(async (taskArgs, {ethers, run}) => {
-    const {normalRent, normalTokenRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth} = taskArgs;
+    const {cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth} = taskArgs;
     const [deployer, croesus, brutus, maximus, aurelius] = await ethers.getSigners();
     console.log("Deploying contracts with the account:", deployer.address);
     await run("compile");
@@ -107,11 +106,11 @@ task("deploy", "Deploys contracts")
     // console.log('Aurelius profil: ', await tenantIdContract.getTenant('2'));
 
 
-    if (normalRent) {
+    if (cryptoRent) {
       //Create lease for ETH payment
       const createLeaseTx = await leaseContract.connect(croesus).createLease(// '4',
-        await trustIdContract.ids(croesus.address),
-        await trustIdContract.ids(maximus.address),
+        croesusUserId,
+        maximusUserId,
         ethers.utils.parseEther('0.0000000000005'),
         '12',
         ethers.constants.AddressZero,
@@ -159,7 +158,7 @@ task("deploy", "Deploys contracts")
       console.log('Croesus reviewed lease: ', 1)
     }
 
-    if (normalTokenRent) {
+    if (cryptoRent) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12);
       await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
 
@@ -204,7 +203,6 @@ task("deploy", "Deploys contracts")
       await reviewLeaseTx2.wait();
       console.log('Croesus reviewed lease: ', 2)
     }
-
 
     if (fiatRentPaymentToken) {
       await oracleContract.updateRate('EUR-ETH');
@@ -357,6 +355,58 @@ task("deploy", "Deploys contracts")
       const cancelOwnerTx = await leaseContract.connect(croesus).cancelLease(croesusUserId,1);
       await cancelOwnerTx.wait();
     }
+
+    //Create Open lease & proposal for crypto payment
+    const createOpenLeaseTx = await leaseContract.connect(croesus).createOpenLease(// '4',
+      croesusUserId,
+      ethers.utils.parseEther('0.0000000000005'),
+      ethers.constants.AddressZero,
+      '12',
+      1,
+      'CRYPTO',
+      getCurrentTimestamp(),);
+    await createOpenLeaseTx.wait();
+    console.log('Open lease created: ', 5);
+
+    //Maximus creates proposal for this lease
+    const createProposalTx = await leaseContract.connect(maximus).submitProposal(
+      maximusUserId,
+      5,
+      12,
+      getCurrentTimestamp(),
+      'QmbyAESGfkKQb9sKRoFjTquA2pBKjA22nA8WsoiDPrfCm9'
+    );
+    await createProposalTx.wait();
+    const proposal = await leaseContract.getProposal(5, maximusUserId);
+    console.log('Proposal created by Maximus for lease: ', proposal.ownerId)
+
+    //Validate Proposal
+    const validateLeaseTx = await leaseContract.connect(croesus).validateProposal(croesusUserId, maximusUserId,5);
+    await validateLeaseTx.wait();
+    const lease = await leaseContract.leases(5)
+    console.log('Proposal validated: ', lease.status)
+    console.log('Lease updated: ', lease.status)
+
+    //Maximus pays 8 rents
+    for (let i = 0; i < 8; i++) {
+      const payRentTx = await leaseContract.connect(maximus).payCryptoRent(maximusUserId,5, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
+      await payRentTx.wait();
+      console.log('Maximus paid rent: ', i)
+    }
+
+    //Croesus marks 4 rents as not paid
+    for (let i = 8; i < 12; i++) {
+      const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,5, i);
+      await markRentNotPaidTx.wait();
+      console.log('Croesus marked rent as not paid: ', i)
+    }
+
+    const reviewLeaseTx = await leaseContract.connect(maximus).reviewLease(maximusUserId,5, 'TenantReviewURI');
+    await reviewLeaseTx.wait();
+    console.log('Maximus reviewed lease: ', 5)
+    const reviewLeaseTx2 = await leaseContract.connect(croesus).reviewLease(croesusUserId,5, 'OwnerReviewURI');
+    await reviewLeaseTx2.wait();
+    console.log('Croesus reviewed lease: ', 5)
 
     console.log('***********************************************************************')
     console.log('***********************************************************************')
