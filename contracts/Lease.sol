@@ -322,12 +322,7 @@ contract Lease {
         string calldata _currencyPair,
         string calldata _cid
     ) external onlyTrustOwner(_profileId) {
-        //TODO Stack too deep
-        Lease storage lease = leases[_leaseId];
-        require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not open");
-        require(bytes(_cid).length == 46, "Lease: Invalid cid");
-        require(lease.ownerId != _profileId, "Lease: Owner cannot submit proposal");
-        require(proposals[_leaseId][_profileId].ownerId != _profileId, "Lease: Proposal already submitted");
+        _validateProposal(_leaseId, _profileId, _cid);
 
         proposals[_leaseId][_profileId] = Proposal({
             ownerId: _profileId,
@@ -787,6 +782,20 @@ contract Lease {
         lease.status = LeaseStatus.ENDED;
 
         emit UpdateLeaseStatus(_leaseId, lease.status);
+    }
+
+    /**
+     * @notice Private function to validate a proposal
+     * @param _leaseId The id of the lease
+     * @param _profileId The id of the profile
+     * @param _cid The IPFS cid of the proposal
+     */
+    function _validateProposal(uint256 _leaseId, uint256 _profileId, string calldata _cid) private view {
+        Lease storage lease = leases[_leaseId];
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not open");
+        require(bytes(_cid).length == 46, "Lease: Invalid cid");
+        require(lease.ownerId != _profileId, "Lease: Owner cannot submit proposal");
+        require(proposals[_leaseId][_profileId].ownerId != _profileId, "Lease: Proposal already submitted");
     }
 
     // =========================== Events ==============================
