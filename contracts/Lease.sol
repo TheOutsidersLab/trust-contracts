@@ -116,7 +116,7 @@ contract Lease {
 
     /**
      * @notice Struct for a proposal
-     * @param profileId The id of the profile
+     * @param ownerId The id of the profile
      * @param totalNumberOfRents The amount of rent payments for the lease
      * @param rentPaymentInterval The minimum interval between each rent payment
      * @param rentPaymentLimitTime The minimum interval to mark a rent payment as not paid
@@ -124,11 +124,11 @@ contract Lease {
      * @param rentAmount Amount of the rent
      * @param paymentToken Token in which the rent will be paid
      * @param currencyPair CRYPTO if rent is in crypto. Otherwise fiat currency available in list.
-     * @param metaData Metadata of the lease
+     * @param metaData Metadata of the proposal
      */
     struct Proposal {
-        uint256 profileId;
-        uint256 totalNumberOfRents;
+        uint256 ownerId;
+        uint8 totalNumberOfRents;
         uint256 rentPaymentInterval;
         uint256 rentPaymentLimitTime;
         uint256 startDate;
@@ -297,6 +297,19 @@ contract Lease {
         return leaseId;
     }
 
+    /**
+     * @notice Function called by a tenant to create a proposal for an open lease
+     * @param _profileId The id of the owner
+     * @param _leaseId The id of the lease
+     * @param _totalNumberOfRents The amount of rent payments for the lease
+     * @param _rentPaymentLimitTime The minimum interval to mark a rent payment as not paid
+     * @param _rentPaymentInterval The minimum interval between each rent payment
+     * @param _startDate The start date of the lease
+     * @param _rentAmount The amount of the rent in fiat
+     * @param _paymentToken The address of the token used for payment
+     * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
+     * @param _cid The cid of the metadata
+     */
     function submitProposal(
         uint256 _profileId,
         uint256 _leaseId,
@@ -309,9 +322,15 @@ contract Lease {
         string calldata _currencyPair,
         string calldata _cid
     ) external onlyTrustOwner(_profileId) {
+        //TODO Stack too deep
+        Lease storage lease = leases[_leaseId];
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not open");
         require(bytes(_cid).length == 46, "Lease: Invalid cid");
+        require(lease.ownerId != _profileId, "Lease: Owner cannot submit proposal");
+        require(proposals[_leaseId][_profileId].ownerId != _profileId, "Lease: Proposal already submitted");
+
         proposals[_leaseId][_profileId] = Proposal({
-            profileId: _profileId,
+            ownerId: _profileId,
             totalNumberOfRents: _totalNumberOfRents,
             rentPaymentInterval: _rentPaymentInterval,
             rentPaymentLimitTime: _rentPaymentLimitTime,
@@ -335,6 +354,46 @@ contract Lease {
             _cid
         );
     }
+
+
+    function validateProposal(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
+        Lease storage lease = leases[_leaseId];
+        require(lease.ownerId == _profileId, "Lease: Only owner can validate proposal");
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not open");
+
+        Proposal memory proposal = proposals[_leaseId][_profileId];
+
+        lease.tenantId = proposal.ownerId;
+        lease.paymentData.rentAmount = proposal.rentAmount;
+        lease.totalNumberOfRents = proposal.totalNumberOfRents;
+        lease.paymentData.paymentToken = proposal.paymentToken;
+        lease.paymentData.currencyPair = proposal.currencyPair;
+        lease.rentPaymentInterval = proposal.rentPaymentInterval;
+        lease.rentPaymentLimitTime = proposal.rentPaymentLimitTime;
+        lease.startDate = proposal.startDate;
+
+        //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
+        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+            lease.rentPayments.push(RentPayment(0, false, 0, 0, PaymentStatus.PENDING));
+        }
+
+        lease.status = LeaseStatus.PENDING;
+
+        emit LeaseCreated(
+            _leaseId,
+            proposal.ownerId,
+            lease.ownerId,
+            proposal.rentAmount,
+            proposal.totalNumberOfRents,
+            proposal.paymentToken,
+            proposal.rentPaymentInterval,
+            proposal.rentPaymentLimitTime,
+            proposal.startDate,
+            proposal.currencyPair
+        );
+    }
+
+    function updateProposal() external {}
 
     /**
      * @notice Called by the tenant to update the lease metadata
@@ -372,6 +431,7 @@ contract Lease {
         emit UpdateLeaseStatus(_leaseId, LeaseStatus.CANCELLED);
     }
 
+    //TODO check if this is still ok with open Leases
     /**
      * @notice Called by the tenant to validate the lease
      * @param _profileId The id of the owner
