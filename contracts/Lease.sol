@@ -124,12 +124,7 @@ contract Lease {
     struct Proposal {
         uint256 ownerId;
         uint8 totalNumberOfRents;
-//        uint256 rentPaymentInterval;
-//        uint256 rentPaymentLimitTime;
         uint256 startDate;
-//        uint256 rentAmount;
-//        address paymentToken;
-//        string currencyPair;
         string metaData;
     }
 
@@ -358,19 +353,7 @@ contract Lease {
 
         lease.status = LeaseStatus.ACTIVE;
 
-        //TODO need leaseUpdated event
-//        emit LeaseCreated(
-//            _leaseId,
-//            proposal.ownerId,
-//            lease.ownerId,
-//            proposal.rentAmount,
-//            proposal.totalNumberOfRents,
-//            proposal.paymentToken,
-//            proposal.rentPaymentInterval,
-//            proposal.rentPaymentLimitTime,
-//            proposal.startDate,
-//            proposal.currencyPair
-//        );
+        emit LeaseUpdated(_tenantId, proposal.totalNumberOfRents, proposal.startDate);
     }
 
     function updateProposal() external {}
@@ -797,6 +780,12 @@ contract Lease {
         uint256 startDate,
         string currencyPair
 //        string metadata
+    );
+
+    event LeaseUpdated(
+        uint256 tenantId,
+        uint8 totalNumberOfRents,
+        uint256 startDate
     );
 
     event ProposalSubmitted(
