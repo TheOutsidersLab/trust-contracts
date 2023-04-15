@@ -4,10 +4,9 @@ pragma solidity ^0.8.0;
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IexecRateOracle} from './IexecRateOracle.sol';
-import {FakeIexecRateOracle} from './FakeIexecOracle.sol';
+import {IexecRateOracle} from "./IexecRateOracle.sol";
+import {FakeIexecRateOracle} from "./FakeIexecOracle.sol";
 import {TrustId} from "./TrustId.sol";
-
 
 /**
  * @title Lease
@@ -43,6 +42,11 @@ contract Lease {
         ENDED,
         CANCELLED
     }
+
+    /**
+     * @notice Applications mappings index by lease ID and owner ID
+     */
+    mapping(uint256 => mapping(uint256 => Proposal)) public proposals;
 
     /**
      * @notice Struct for a lease with price
@@ -111,6 +115,30 @@ contract Lease {
     }
 
     /**
+     * @notice Struct for a proposal
+     * @param profileId The id of the profile
+     * @param totalNumberOfRents The amount of rent payments for the lease
+     * @param rentPaymentInterval The minimum interval between each rent payment
+     * @param rentPaymentLimitTime The minimum interval to mark a rent payment as not paid
+     * @param startDate The start date of the lease
+     * @param rentAmount Amount of the rent
+     * @param paymentToken Token in which the rent will be paid
+     * @param currencyPair CRYPTO if rent is in crypto. Otherwise fiat currency available in list.
+     * @param metaData Metadata of the lease
+     */
+    struct Proposal {
+        uint256 profileId;
+        uint256 totalNumberOfRents;
+        uint256 rentPaymentInterval;
+        uint256 rentPaymentLimitTime;
+        uint256 startDate;
+        uint256 rentAmount;
+        address paymentToken;
+        string currencyPair;
+        string metaData;
+    }
+
+    /**
      * @notice Struct for rent payments
      * @param validationDate The timestamp of the rent status update
      * @param withoutIssues True is the tenant had no issues with the rented property during this rent period
@@ -139,8 +167,7 @@ contract Lease {
     //    FakeIexecOracle rateOracle;
     IexecRateOracle rateOracle;
 
-
-    constructor (address _trustIdContract, address _rateOracle) {
+    constructor(address _trustIdContract, address _rateOracle) {
         _tokenIds.increment();
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
@@ -154,13 +181,12 @@ contract Lease {
      * @param _leaseId The id of the lease
      * @return rentPayments The array of all rent payments of the lease
      */
-    function getPayments(uint256 _leaseId) external view returns(RentPayment[] memory rentPayments) {
+    function getPayments(uint256 _leaseId) external view returns (RentPayment[] memory rentPayments) {
         Lease storage lease = leases[_leaseId];
         return lease.rentPayments;
     }
 
     // =========================== User functions ==============================
-
 
     /**
      * @notice Function called by the owner to create a new lease assigned to a tenant
@@ -183,8 +209,8 @@ contract Lease {
         uint256 _rentPaymentInterval,
         uint256 _rentPaymentLimitTime,
         string calldata _currencyPair,
-        uint256 _startDate) external onlyTrustOwner(_ownerId) returns (uint256)
-    {
+        uint256 _startDate
+    ) external onlyTrustOwner(_ownerId) returns (uint256) {
         Lease storage lease = leases[_tokenIds.current()];
         lease.ownerId = _ownerId;
         lease.tenantId = _tenantId;
@@ -198,12 +224,22 @@ contract Lease {
         lease.status = LeaseStatus.PENDING;
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
-        for(uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
             lease.rentPayments.push(RentPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
-        emit LeaseCreated(_tokenIds.current(), _tenantId, lease.ownerId, _rentAmount, _totalNumberOfRents,
-            _paymentToken, _rentPaymentInterval, _rentPaymentLimitTime, _startDate, _currencyPair);
+        emit LeaseCreated(
+            _tokenIds.current(),
+            _tenantId,
+            lease.ownerId,
+            _rentAmount,
+            _totalNumberOfRents,
+            _paymentToken,
+            _rentPaymentInterval,
+            _rentPaymentLimitTime,
+            _startDate,
+            _currencyPair
+        );
 
         uint256 leaseId = _tokenIds.current();
         _tokenIds.increment();
@@ -228,8 +264,8 @@ contract Lease {
         uint256 _rentPaymentInterval,
         uint256 _rentPaymentLimitTime,
         string calldata _currencyPair,
-        uint256 _startDate) external onlyTrustOwner(_profileId) returns (uint256)
-    {
+        uint256 _startDate
+    ) external onlyTrustOwner(_profileId) returns (uint256) {
         Lease storage lease = leases[_tokenIds.current()];
         lease.ownerId = _profileId;
         lease.tenantId = 0;
@@ -242,8 +278,18 @@ contract Lease {
         lease.startDate = _startDate;
         lease.status = LeaseStatus.PENDING;
 
-        emit LeaseCreated(_tokenIds.current(), 0, _profileId, _rentAmount, _totalNumberOfRents,
-            _paymentToken, _rentPaymentInterval, _rentPaymentLimitTime, _startDate, _currencyPair);
+        emit LeaseCreated(
+            _tokenIds.current(),
+            0,
+            _profileId,
+            _rentAmount,
+            0,
+            _paymentToken,
+            _rentPaymentInterval,
+            _rentPaymentLimitTime,
+            _startDate,
+            _currencyPair
+        );
 
         uint256 leaseId = _tokenIds.current();
         _tokenIds.increment();
@@ -251,10 +297,43 @@ contract Lease {
         return leaseId;
     }
 
-    function submitApplication (uint256 _profileId, uint256 _leaseId, string memory _cid) external onlyTrustOwner(_profileId) {
-        Lease storage lease = leases[_leaseId];
-        lease.applications.push(Application(_profileId, _cid, ApplicationStatus.PENDING));
-        emit ApplicationSubmitted(_leaseId, _profileId, _cid);
+    function submitProposal(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint8 _totalNumberOfRents,
+        uint256 _rentPaymentInterval,
+        uint256 _rentPaymentLimitTime,
+        uint256 _startDate,
+        uint256 _rentAmount,
+        address _paymentToken,
+        string calldata _currencyPair,
+        string calldata _cid
+    ) external onlyTrustOwner(_profileId) {
+        require(bytes(_cid).length == 46, "Lease: Invalid cid");
+        proposals[_leaseId][_profileId] = Proposal({
+            profileId: _profileId,
+            totalNumberOfRents: _totalNumberOfRents,
+            rentPaymentInterval: _rentPaymentInterval,
+            rentPaymentLimitTime: _rentPaymentLimitTime,
+            startDate: _startDate,
+            rentAmount: _rentAmount,
+            paymentToken: _paymentToken,
+            currencyPair :_currencyPair,
+            metaData: _cid
+        });
+
+        emit ProposalSubmitted(
+            _leaseId,
+            _profileId,
+            _totalNumberOfRents,
+            _rentPaymentInterval,
+            _rentPaymentLimitTime,
+            _startDate,
+            _rentAmount,
+            _paymentToken,
+            _currencyPair,
+            _cid
+        );
     }
 
     /**
@@ -263,7 +342,11 @@ contract Lease {
      * @param _leaseId The id of the lease
      * @param _newCid The new IPFS URI of the lease metadata
      */
-    function updateLeaseMetaData(uint256 _profileId, uint256 _leaseId, string memory _newCid) external onlyTrustOwner(_profileId) {
+    function updateLeaseMetaData(
+        uint256 _profileId,
+        uint256 _leaseId,
+        string memory _newCid
+    ) external onlyTrustOwner(_profileId) {
         require(bytes(_newCid).length == 46, "Lease: Invalid cid");
 
         Lease storage lease = leases[_leaseId];
@@ -271,7 +354,6 @@ contract Lease {
 
         emit LeaseMetaDataUpdated(_leaseId, _newCid);
     }
-
 
     /**
      * @notice Called by the tenant or the owner to decline the lease proposition
@@ -282,17 +364,13 @@ contract Lease {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
-        require(
-            _profileId == lease.ownerId || _profileId == lease.tenantId,
-            "Lease: Not an actor of this lease"
-        );
+        require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
         require(lease.status == LeaseStatus.PENDING, "Lease: Lease was already validated");
 
         lease.status = LeaseStatus.CANCELLED;
 
         emit UpdateLeaseStatus(_leaseId, LeaseStatus.CANCELLED);
     }
-
 
     /**
      * @notice Called by the tenant to validate the lease
@@ -335,7 +413,12 @@ contract Lease {
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function payCryptoRent(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyTrustOwner(_profileId) {
+    function payCryptoRent(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId,
+        bool _withoutIssues
+    ) external payable onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
@@ -354,9 +437,13 @@ contract Lease {
         }
 
         if (lease.paymentData.paymentToken != address(0)) {
-            IERC20(lease.paymentData.paymentToken).transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), lease.paymentData.rentAmount);
+            IERC20(lease.paymentData.paymentToken).transferFrom(
+                msg.sender,
+                trustIdContract.ownerOf(lease.ownerId),
+                lease.paymentData.rentAmount
+            );
         } else {
-            payable (msg.sender).transfer(msg.value);
+            payable(msg.sender).transfer(msg.value);
         }
 
         _updateRentStatus(_leaseId, _rentId, _withoutIssues);
@@ -373,7 +460,12 @@ contract Lease {
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      * @dev Only the registered tenant can call this function
      */
-    function payFiatRentInEth(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyTrustOwner(_profileId) {
+    function payFiatRentInEth(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId,
+        bool _withoutIssues
+    ) external payable onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
@@ -394,7 +486,7 @@ contract Lease {
 
         require(msg.value >= (rentAmountInWei - (rentAmountInWei * slippage) / 10000), "Wrong rent value");
 
-        payable (msg.sender).transfer(msg.value);
+        payable(msg.sender).transfer(msg.value);
 
         _updateRentStatus(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -411,7 +503,13 @@ contract Lease {
      * @param _amountInSmallestDecimal amount in smallest token decimal
      * @dev Only the registered tenant can call this function
      */
-    function payFiatRentInToken(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues, uint256 _amountInSmallestDecimal) external onlyTrustOwner(_profileId) {
+    function payFiatRentInToken(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId,
+        bool _withoutIssues,
+        uint256 _amountInSmallestDecimal
+    ) external onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
@@ -437,7 +535,10 @@ contract Lease {
         // exchangeRate: in tokenDecimal/Fiat | rentAmount in fiat currency
         uint256 rentAmountInToken = lease.paymentData.rentAmount * (uint256(exchangeRate));
 
-        require(_amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / 10000), "Wrong rent value");
+        require(
+            _amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / 10000),
+            "Wrong rent value"
+        );
 
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
 
@@ -454,16 +555,23 @@ contract Lease {
      * @param _rentId The id of the rent
      * @dev Only the owner of the lease can call this function
      */
-    function markRentAsNotPaid(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external onlyTrustOwner(_profileId) {
+    function markRentAsNotPaid(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId
+    ) external onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
         Lease memory _lease = leases[_leaseId];
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
         require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
-        require(block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId, "Lease: Tenant still has time to pay");
+        require(
+            block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId,
+            "Lease: Tenant still has time to pay"
+        );
 
         RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
-//        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
+        //        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
 
         require(_rentPayment.paymentStatus == PaymentStatus.PENDING, "Lease: Payment status should be PENDING");
 
@@ -480,15 +588,19 @@ contract Lease {
      * @param _rentId The id of the rent
      * @dev Only the owner of the lease can call this function for a RentPayment set to NOT_PAID
      */
-    function markRentAsPending(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external onlyTrustOwner(_profileId) {
+    function markRentAsPending(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId
+    ) external onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
-//        Lease storage lease = leases[_leaseId];
+        //        Lease storage lease = leases[_leaseId];
         Lease memory _lease = leases[_leaseId];
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
         require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
 
-//        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
+        //        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
         RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
         require(_rentPayment.paymentStatus == PaymentStatus.NOT_PAID, "Lease: Payment must be set to NOT_PAID");
 
@@ -506,13 +618,10 @@ contract Lease {
     function cancelLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease does not exist");
         Lease storage lease = leases[_leaseId];
-        require(
-            _profileId == lease.ownerId || _profileId == lease.tenantId,
-            "Lease: Not an actor of this lease"
-        );
+        require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        if(_profileId == lease.ownerId) {
+        if (_profileId == lease.ownerId) {
             require(lease.cancellation.cancelledByOwner == false, "Lease already cancelled by owner");
             lease.cancellation.cancelledByOwner = true;
         } else {
@@ -522,10 +631,10 @@ contract Lease {
 
         emit CancellationRequested(_leaseId, lease.cancellation.cancelledByOwner, lease.cancellation.cancelledByTenant);
 
-        if(lease.cancellation.cancelledByOwner && lease.cancellation.cancelledByTenant) {
-            for(uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        if (lease.cancellation.cancelledByOwner && lease.cancellation.cancelledByTenant) {
+            for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
                 RentPayment storage rentPayment = lease.rentPayments[i];
-                if(rentPayment.paymentStatus == PaymentStatus.PENDING) {
+                if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                     _updateRentStatus(_leaseId, i, PaymentStatus.CANCELLED);
                 }
             }
@@ -539,17 +648,18 @@ contract Lease {
      * @param _reviewUri The IPFS URI of the review
      * @dev Only one review per tenant / owner. Can be called again to update the review.
      */
-    function reviewLease(uint256 _profileId, uint256 _leaseId, string calldata _reviewUri) external onlyTrustOwner(_profileId) {
+    function reviewLease(
+        uint256 _profileId,
+        uint256 _leaseId,
+        string calldata _reviewUri
+    ) external onlyTrustOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
-        require(
-            _profileId == lease.ownerId || _profileId == lease.tenantId,
-            "Lease: Not an actor of this lease"
-        );
+        require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
         require(lease.status == LeaseStatus.ENDED, "Lease: Lease is still not finished");
 
-        if(_profileId == lease.tenantId) {
+        if (_profileId == lease.tenantId) {
             require(!lease.reviewStatus.tenantReviewed, "Lease: Tenant already reviewed");
             lease.reviewStatus.tenantReviewUri = _reviewUri;
             lease.reviewStatus.tenantReviewed = true;
@@ -570,7 +680,11 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function _updateRentStatus(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
+    function _updateRentStatus(
+        uint256 _leaseId,
+        uint256 _rentId,
+        bool _withoutIssues
+    ) private {
         RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = PaymentStatus.PAID;
         rentPayment.withoutIssues = _withoutIssues;
@@ -583,7 +697,11 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _paymentStatus The new payment status
      */
-    function _updateRentStatus(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus) private {
+    function _updateRentStatus(
+        uint256 _leaseId,
+        uint256 _rentId,
+        PaymentStatus _paymentStatus
+    ) private {
         RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = _paymentStatus;
         rentPayment.validationDate = block.timestamp;
@@ -597,10 +715,12 @@ contract Lease {
     function _updateLeaseAndPaymentsStatuses(uint256 _leaseId) private {
         Lease storage lease = leases[_leaseId];
 
-        for(uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
             RentPayment storage rentPayment = lease.rentPayments[i];
-            if(rentPayment.paymentStatus == PaymentStatus.PENDING ||
-                rentPayment.paymentStatus == PaymentStatus.CONFLICT) {
+            if (
+                rentPayment.paymentStatus == PaymentStatus.PENDING ||
+                rentPayment.paymentStatus == PaymentStatus.CONFLICT
+            ) {
                 return;
             }
         }
@@ -621,13 +741,34 @@ contract Lease {
         uint256 rentPaymentInterval,
         uint256 rentPaymentLimitTime,
         uint256 startDate,
-        string currencyPair);
+        string currencyPair
+    );
+
+    event ProposalSubmitted(
+        uint256 leaseId,
+        uint256 tenantId,
+        uint8 totalNumberOfRents,
+        uint256 rentPaymentInterval,
+        uint256 rentPaymentLimitTime,
+        uint256 startDate,
+        uint256 rentAmount,
+        address paymentToken,
+        string currencyPair,
+        string metaData
+    );
 
     event RentPaymentIssueStatusUpdated(uint256 leaseId, uint256 rentId, bool withoutIssues);
 
     event CryptoRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount);
 
-    event FiatRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount, int256 exchangeRate, uint256 exchangeRateTimestamp);
+    event FiatRentPaid(
+        uint256 leaseId,
+        uint256 rentId,
+        bool withoutIssues,
+        uint256 amount,
+        int256 exchangeRate,
+        uint256 exchangeRateTimestamp
+    );
 
     event RentNotPaid(uint256 leaseId, uint256 rentId);
 
@@ -683,5 +824,4 @@ contract Lease {
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         _;
     }
-
 }
