@@ -371,16 +371,12 @@ contract Lease {
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
-        //TODO Will be implemented when exchangeRate switched to an index
-        //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
-
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
         //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
         require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
-
 
         (int256 exchangeRate, uint256 date) = rateOracle.getRate(lease.paymentData.currencyPair);
         rentPayment.exchangeRate = exchangeRate;
