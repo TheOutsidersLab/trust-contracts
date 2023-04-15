@@ -288,26 +288,31 @@ contract Lease {
      * @param _rentId The id of the rent
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function payCryptoRentInETH(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyOwner(_profileId) {
+    function payCryptoRent(uint256 _profileId, uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external payable onlyOwner(_profileId) {
         require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        //TODO Will be implemented when exchangeRate switched to an index
-        //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
-
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
         //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
-        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
+        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not due");
 
-        require(msg.value == lease.paymentData.rentAmount, "Wrong rent value");
+        if (lease.paymentData.paymentToken == address(0)) {
+            require(msg.value == lease.paymentData.rentAmount, "Non-matching funds");
+        } else {
+            require(msg.value == 0, "Non-matching funds");
+        }
 
-        payable (msg.sender).transfer(msg.value);
+        if (lease.paymentData.paymentToken != address(0)) {
+            IERC20(lease.paymentData.paymentToken).transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), lease.paymentData.rentAmount);
+        } else {
+            payable (msg.sender).transfer(msg.value);
+        }
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _updateRentStatus(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, msg.value);
@@ -347,7 +352,7 @@ contract Lease {
         //Need allowance to Lease contract before executing this function
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amount);
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _updateRentStatus(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, _amount);
@@ -388,7 +393,7 @@ contract Lease {
 
         payable (msg.sender).transfer(msg.value);
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _updateRentStatus(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, msg.value, exchangeRate, date);
@@ -433,7 +438,7 @@ contract Lease {
 
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _updateRentStatus(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
@@ -562,7 +567,7 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function _payRent(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
+    function _updateRentStatus(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
         RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = PaymentStatus.PAID;
         rentPayment.withoutIssues = _withoutIssues;
