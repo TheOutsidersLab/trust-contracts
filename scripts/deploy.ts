@@ -115,7 +115,6 @@ task("deploy", "Deploys contracts")
         '12',
         ethers.constants.AddressZero,
         1,
-        1,
         'CRYPTO',
         getCurrentTimestamp(),);
       await createLeaseTx.wait();
@@ -136,19 +135,13 @@ task("deploy", "Deploys contracts")
       // const hasLease = await tenantIdContract.userHasLease(await tenantIdContract.ids(carol.address));
       // console.log('Maximus has lease: ', hasLease);
 
-      //Maximus pays 8 rents
-      for (let i = 0; i < 8; i++) {
+      //Maximus pays 12 rents
+      for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract.connect(maximus).payCryptoRent(maximusUserId,1, i, true, {value: ethers.utils.parseEther('0.0000000000005')});
         await payRentTx.wait();
         console.log('Maximus paid rent: ', i)
       }
 
-      //Croesus marks 4 rents as not paid
-      for (let i = 8; i < 12; i++) {
-        const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,1, i);
-        await markRentNotPaidTx.wait();
-        console.log('Croesus marked rent as not paid: ', i)
-      }
 
       const reviewLeaseTx = await leaseContract.connect(maximus).reviewLease(maximusUserId,1, 'TenantReviewURI');
       await reviewLeaseTx.wait();
@@ -170,7 +163,6 @@ task("deploy", "Deploys contracts")
         '12',
         croesusTokenAddress,
         2,
-        2,
         'CRYPTO',
         getCurrentTimestamp(),);
       await createLeaseTx.wait();
@@ -182,18 +174,11 @@ task("deploy", "Deploys contracts")
       const lease = await leaseContract.leases(1)
       console.log('Lease validated: ', lease.status)
 
-      //Aurelius pays 8 rents
-      for (let i = 0; i < 8; i++) {
+      //Aurelius pays 12 rents
+      for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract.connect(aurelius).payCryptoRent(aureliusUserId,2, i, true);
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
-      }
-
-      //Croesus marks 4 rents as not paid
-      for (let i = 8; i < 12; i++) {
-        const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,2, i);
-        await markRentNotPaidTx.wait();
-        console.log('Croesus marked rent as not paid: ', i)
       }
 
       const reviewLeaseTx = await leaseContract.connect(aurelius).reviewLease(aureliusUserId,2, 'TenantReviewURI');
@@ -220,7 +205,6 @@ task("deploy", "Deploys contracts")
         "5",
         '12',
         croesusTokenAddress,
-        2,
         3,
         'USD-SHI',
         getCurrentTimestamp(),);
@@ -233,7 +217,7 @@ task("deploy", "Deploys contracts")
       const lease = await leaseContract.leases(3)
       console.log('Lease validated: ', lease.status)
 
-      //Aurelius pays 8 rents
+      //Aurelius pays 12 rents
       // await oracleContract.updateRate('USD-ETH');
       const conversionRate = await oracleContract.getRate(lease.paymentData.currencyPair);
       console.log('Conversion rate: ', conversionRate[0].toNumber() / 10**18); // usd-eth
@@ -242,20 +226,13 @@ task("deploy", "Deploys contracts")
       const rentAmountInToken = lease.paymentData.rentAmount.mul(conversionRate[0]);
       console.log('Rent amount in token: ', rentAmountInToken.toString());
 
-      const totalAmountToApprove = rentAmountInToken.mul(8);
+      const totalAmountToApprove = rentAmountInToken.mul(12);
       await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
 
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract.connect(aurelius).payFiatRentInToken(aureliusUserId,3, i, true, rentAmountInToken);
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
-      }
-
-      //Croesus marks 4 rents as not paid
-      for (let i = 8; i < 12; i++) {
-        const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,3, i);
-        await markRentNotPaidTx.wait();
-        console.log('Croesus marked rent as not paid: ', i)
       }
 
       const reviewLeaseTx = await leaseContract.connect(aurelius).reviewLease(aureliusUserId,3, 'TenantReviewURI');
@@ -281,7 +258,6 @@ task("deploy", "Deploys contracts")
         '12',
         croesusTokenAddress,
         0,
-        0,
         'USD-ETH',
         getCurrentTimestamp(),);
       await createLeaseTx.wait();
@@ -302,17 +278,10 @@ task("deploy", "Deploys contracts")
       const rentAmountInWei = lease.paymentData.rentAmount.mul(conversionRate[0]);
       console.log('Rent amount in token: ', rentAmountInWei.toString());
 
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract.connect(aurelius).payFiatRentInEth(aureliusUserId,4, i, true, {value: rentAmountInWei});
         await payRentTx.wait();
         console.log('Aurelius paid rent: ', i)
-      }
-
-      //Croesus marks 4 rents as not paid
-      for (let i = 8; i < 12; i++) {
-        const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,4, i);
-        await markRentNotPaidTx.wait();
-        console.log('Croesus marked rent as not paid: ', i)
       }
 
       const reviewLeaseTx = await leaseContract.connect(aurelius).reviewLease(aureliusUserId,4, 'TenantReviewURI');
@@ -330,20 +299,7 @@ task("deploy", "Deploys contracts")
         await payRentTx.wait();
       }
 
-      //Croesus marks 4 rents as not paid
-      for (let i = 4; i < 8; i++) {
-        const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,1, i);
-        await markRentNotPaidTx.wait();
-      }
-
-      //Test owner marks rend 7 as pending
-      const markRentPendingTx = await leaseContract.connect(croesus).markRentAsPending(croesusUserId,1, 7);
-      await markRentPendingTx.wait();
-
-      const payments = await leaseContract.getPayments(1);
-      console.log('Payments 7 pending: ', payments[7]);
-
-      //A=Maximus pays rent 7 with issues
+      //Maximus pays rent 7 with issues
       const payRentTx = await leaseContract.connect(maximus).payCryptoRent(maximusUserId,1, 7, false, {value: ethers.utils.parseEther('0.0000000000005')});
       await payRentTx.wait();
       const payments2 = await leaseContract.getPayments(1);
@@ -362,7 +318,6 @@ task("deploy", "Deploys contracts")
       ethers.utils.parseEther('0.0000000000005'),
       ethers.constants.AddressZero,
       '12',
-      1,
       'CRYPTO',
       getCurrentTimestamp(),);
     await createOpenLeaseTx.wait();
@@ -394,11 +349,11 @@ task("deploy", "Deploys contracts")
       console.log('Maximus paid rent: ', i)
     }
 
-    //Croesus marks 4 rents as not paid
+    //Maximus pays 4 rents with issues
     for (let i = 8; i < 12; i++) {
-      const markRentNotPaidTx = await leaseContract.connect(croesus).markRentAsNotPaid(croesusUserId,5, i);
-      await markRentNotPaidTx.wait();
-      console.log('Croesus marked rent as not paid: ', i)
+      const payRentTx = await leaseContract.connect(maximus).payCryptoRent(maximusUserId,5, i, false, {value: ethers.utils.parseEther('0.0000000000005')});
+      await payRentTx.wait();
+      console.log('Maximus paid rent: ', i)
     }
 
     const reviewLeaseTx = await leaseContract.connect(maximus).reviewLease(maximusUserId,5, 'TenantReviewURI');
