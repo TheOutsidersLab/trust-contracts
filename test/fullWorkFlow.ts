@@ -2,123 +2,87 @@ import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import {SignerWithAddress} from "@nomiclabs/hardhat-ethers/signers";
+import {TrustId, Lease, IexecRateOracle, CroesusTokenERC20, FakeIexecRateOracle} from "../typechain-types";
+import {deploy} from "./utils/deploy";
 
-describe("Lock", function () {
-  // We define a fixture to reuse the same setup in every test.
-  // We use loadFixture to run this setup once, snapshot that state,
-  // and reset Hardhat Network to that snapshot in every test.
-  async function deployOneYearLockFixture() {
-    const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-    const ONE_GWEI = 1_000_000_000;
+describe("Trust", function () {
+  let deployer: SignerWithAddress,
+    alice: SignerWithAddress,
+    bob: SignerWithAddress,
+    carol: SignerWithAddress,
+    dave: SignerWithAddress,
+    eve: SignerWithAddress,
+    frank: SignerWithAddress,
+    grace: SignerWithAddress,
+    heidi: SignerWithAddress,
+    trustIdContract: TrustId,
+    leaseContract: Lease,
+    croesusTokenContract: CroesusTokenERC20,
+    fakeIexecRateOracle: FakeIexecRateOracle,
+    IexecRateOracle: IexecRateOracle,
+    chainId: number
 
-    const lockedAmount = ONE_GWEI;
-    const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
+  const ALICE_ID = 1;
+  const DUMMY_CONTRACT_ADDRESS = '0x3F87289e6Ec2D05C32d8A74CCfb30773fF549306';
 
-    // Contracts are deployed using the first signer/account by default
-    const [owner, otherAccount] = await ethers.getSigners();
+  before(async function () {
+    // Get the Signers
+    [deployer, alice, bob, carol, dave, eve, frank, grace, heidi] = await ethers.getSigners();
+    [trustIdContract, leaseContract, fakeIexecRateOracle, croesusTokenContract] = await deploy();
 
-    const Lock = await ethers.getContractFactory("Lock");
-    const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
-
-    return { lock, unlockTime, lockedAmount, owner, otherAccount };
-  }
-
-  describe("Deployment", function () {
-    it("Should set the right unlockTime", async function () {
-      const { lock, unlockTime } = await loadFixture(deployOneYearLockFixture);
-
-      expect(await lock.unlockTime()).to.equal(unlockTime);
-    });
-
-    it("Should set the right owner", async function () {
-      const { lock, owner } = await loadFixture(deployOneYearLockFixture);
-
-      expect(await lock.owner()).to.equal(owner.address);
-    });
-
-    it("Should receive and store the funds to lock", async function () {
-      const { lock, lockedAmount } = await loadFixture(
-        deployOneYearLockFixture
-      );
-
-      expect(await ethers.provider.getBalance(lock.address)).to.equal(
-        lockedAmount
-      );
-    });
-
-    it("Should fail if the unlockTime is not in the future", async function () {
-      // We don't use the fixture here because we want a different deployment
-      const latestTime = await time.latest();
-      const Lock = await ethers.getContractFactory("Lock");
-      await expect(Lock.deploy(latestTime, { value: 1 })).to.be.revertedWith(
-        "Unlock time should be in the future"
-      );
-    });
+    // Transfer tokens to all signers
+    await croesusTokenContract.transfer(alice.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(bob.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(carol.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(dave.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(eve.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(frank.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(grace.address, ethers.utils.parseEther('1000'))
+    await croesusTokenContract.transfer(heidi.address, ethers.utils.parseEther('1000'))
   });
 
-  describe("Withdrawals", function () {
-    describe("Validations", function () {
-      it("Should revert with the right error if called too soon", async function () {
-        const { lock } = await loadFixture(deployOneYearLockFixture);
-
-        await expect(lock.withdraw()).to.be.revertedWith(
-          "You can't withdraw yet"
-        );
-      });
-
-      it("Should revert with the right error if called from another account", async function () {
-        const { lock, unlockTime, otherAccount } = await loadFixture(
-          deployOneYearLockFixture
-        );
-
-        // We can increase the time in Hardhat Network
-        await time.increaseTo(unlockTime);
-
-        // We use lock.connect() to send a transaction from another account
-        await expect(lock.connect(otherAccount).withdraw()).to.be.revertedWith(
-          "You aren't the owner"
-        );
-      });
-
-      it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
-        const { lock, unlockTime } = await loadFixture(
-          deployOneYearLockFixture
-        );
-
-        // Transactions are sent using the first signer by default
-        await time.increaseTo(unlockTime);
-
-        await expect(lock.withdraw()).not.to.be.reverted;
-      });
+describe("TrustId Contract Test", function () {
+    it("Only Deployer can update Lease Contract address", async function () {
+      const tx = trustIdContract.connect(alice).updateLeaseContractAddress(DUMMY_CONTRACT_ADDRESS);
+      await expect(tx).to.be.revertedWith('Ownable: caller is not the owner');
+      const leaseContractAddress = trustIdContract.address;
+      const tx2 = await trustIdContract.connect(deployer).updateLeaseContractAddress(DUMMY_CONTRACT_ADDRESS);
+      // await expect(tx2).to.emit(trustIdContract, "UpdateLeaseContractAddress").withArgs(DUMMY_CONTRACT_ADDRESS);
+      await expect(tx2).not.to.be.reverted;
+      // Reset address to original
+      await trustIdContract.connect(deployer).updateLeaseContractAddress(leaseContractAddress);
     });
 
-    describe("Events", function () {
-      it("Should emit an event on withdrawals", async function () {
-        const { lock, unlockTime, lockedAmount } = await loadFixture(
-          deployOneYearLockFixture
-        );
-
-        await time.increaseTo(unlockTime);
-
-        await expect(lock.withdraw())
-          .to.emit(lock, "Withdrawal")
-          .withArgs(lockedAmount, anyValue); // We accept any value as `when` arg
-      });
+    it("Alice can mint an ID", async function () {
+      const tx = await trustIdContract.connect(alice).mint("alice");
+      await expect(tx).to.emit(trustIdContract, "Mint").withArgs(alice.address, ALICE_ID, "alice");
+      expect(await trustIdContract.connect(alice).ids(alice.address)).to.be.equal(ALICE_ID);
     });
 
-    describe("Transfers", function () {
-      it("Should transfer the funds to the owner", async function () {
-        const { lock, unlockTime, lockedAmount, owner } = await loadFixture(
-          deployOneYearLockFixture
-        );
+    it("Alice can check her balance", async function () {
+      expect(await trustIdContract.connect(alice).balanceOf(alice.address)).to.be.equal(1);
+    });
 
-        await time.increaseTo(unlockTime);
+    it("Alice can't mint a second id", async function () {
+      const tx = trustIdContract.connect(alice).mint("alice");
+      await expect(tx).to.be.revertedWith('You already have a User Id')
+    });
 
-        await expect(lock.withdraw()).to.changeEtherBalances(
-          [owner, lock],
-          [lockedAmount, -lockedAmount]
-        );
-      });
+    it("Alice can't transfer her ID", async function () {
+      const tx = trustIdContract.connect(alice).transferFrom(alice.address, bob.address, ALICE_ID);
+      expect(await trustIdContract.connect(alice).ids(alice.address)).to.be.equal(ALICE_ID);
+    });
+
+    it("Alice can update her profile", async function () {
+      const tx = await trustIdContract.connect(alice).updateProfileData(ALICE_ID, 'cid');
+      await expect(tx).to.emit(trustIdContract, "CidUpdated").withArgs(ALICE_ID, 'cid');
+      // expect(await trustIdContract.connect(alice).profiles(ALICE_ID)).to.be.equal('cid');
+    });
+
+    it("Should not be possible for Bob to update her profile", async function () {
+      const tx = trustIdContract.connect(bob).updateProfileData(ALICE_ID, 'cid');
+      await expect(tx).to.be.revertedWith('UserId: caller is not the owner')
     });
   });
 });

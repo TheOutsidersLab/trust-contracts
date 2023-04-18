@@ -45,7 +45,7 @@ export async function deploy(): Promise<
   console.log("CroesusToken address:", croesusTokenAddress);
 
   return [
-    trustIdContract,
+    trustIdContract as TrustId,
     leaseContract,
     oracleContract,
     croesusTokenContract,
