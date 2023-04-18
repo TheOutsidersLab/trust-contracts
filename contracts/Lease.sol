@@ -20,7 +20,8 @@ import {TrustId} from "./TrustId.sol";
 contract Lease {
     // =========================== Enums & Structs =============================
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIds;
+    Counters.Counter private _leaseIds;
+    Counters.Counter private _openProposalIds;
 
     uint64 public constant DIVIDER = 10**18;
     uint8 private slippage = 200; // per 10_000
@@ -43,10 +44,12 @@ contract Lease {
         CANCELLED
     }
 
-    /**
-     * @notice Applications mappings index by lease ID and owner ID
-     */
-    mapping(uint256 => mapping(uint256 => Proposal)) public proposals;
+    enum ProposalStatus {
+        PENDING,
+        ACCEPTED,
+        REJECTED
+    }
+
 
     /**
      * @notice Struct for a lease with price
@@ -129,6 +132,18 @@ contract Lease {
     }
 
     /**
+     * @notice Struct for a proposal
+     * @param ownerId The id of the proposal owner
+     * @param status The status of the proposal
+     * @param cid The IPFS cid of the proposal's metadata
+     */
+    struct OpenProposal {
+        uint256 ownerId;
+        ProposalStatus status;
+        string cid;
+    }
+
+    /**
      * @notice Struct for rent payments
      * @param validationDate The timestamp of the rent status update
      * @param withoutIssues True is the tenant had no issues with the rented property during this rent period
@@ -151,6 +166,16 @@ contract Lease {
      */
     mapping(uint256 => Lease) public leases;
 
+    /**
+     * @notice Applications mappings index by lease ID and owner ID
+     */
+    mapping(uint256 => mapping(uint256 => Proposal)) public proposals;
+
+    /**
+     * @notice Open Proposals mappings index by openProposal ID
+     */
+    mapping(uint256 => OpenProposal) public openProposals;
+
     //    string[] public availableCurrency = ['CRYPTO', 'USD', 'EUR'];
 
     TrustId trustIdContract;
@@ -158,7 +183,7 @@ contract Lease {
     IexecRateOracle rateOracle;
 
     constructor(address _trustIdContract, address _rateOracle) {
-        _tokenIds.increment();
+        _leaseIds.increment();
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);
@@ -211,7 +236,7 @@ contract Lease {
         string calldata _currencyPair,
         uint256 _startDate
     ) external onlyTrustOwner(_ownerId) returns (uint256) {
-        Lease storage lease = leases[_tokenIds.current()];
+        Lease storage lease = leases[_leaseIds.current()];
         lease.ownerId = _ownerId;
         lease.tenantId = _tenantId;
         lease.paymentData.rentAmount = _rentAmount;
@@ -229,7 +254,7 @@ contract Lease {
         }
 
         emit LeaseCreated(
-            _tokenIds.current(),
+            _leaseIds.current(),
             _tenantId,
             lease.ownerId,
             _rentAmount,
@@ -242,8 +267,8 @@ contract Lease {
 //            "cid"
         );
 
-        uint256 leaseId = _tokenIds.current();
-        _tokenIds.increment();
+        uint256 leaseId = _leaseIds.current();
+        _leaseIds.increment();
 
         return leaseId;
     }
@@ -268,7 +293,7 @@ contract Lease {
         uint256 _startDate
 //        string calldata _metaData
     ) external onlyTrustOwner(_profileId) returns (uint256) {
-        Lease storage lease = leases[_tokenIds.current()];
+        Lease storage lease = leases[_leaseIds.current()];
         lease.ownerId = _profileId;
         lease.tenantId = 0;
         lease.paymentData.rentAmount = _rentAmount;
@@ -282,7 +307,7 @@ contract Lease {
         lease.status = LeaseStatus.PENDING;
 
         emit LeaseCreated(
-            _tokenIds.current(),
+            _leaseIds.current(),
             0,
             _profileId,
             _rentAmount,
@@ -295,8 +320,8 @@ contract Lease {
 //            _metaData
         );
 
-        uint256 leaseId = _tokenIds.current();
-        _tokenIds.increment();
+        uint256 leaseId = _leaseIds.current();
+        _leaseIds.increment();
 
         return leaseId;
     }
@@ -334,6 +359,30 @@ contract Lease {
         );
     }
 
+    /**
+     * @notice Function called by a potential tenant to create a new open proposal
+     * @param _profileId The id of the proposal maker
+     * @param _cid The cid of the metadata with the proposal details
+     */
+    function createOpenProposal(
+        uint256 _profileId,
+        string calldata _cid
+    ) external onlyTrustOwner(_profileId) {
+        uint256 openProposalId = _openProposalIds.current();
+        openProposals[openProposalId] = OpenProposal({
+            ownerId: _profileId,
+            status: ProposalStatus.PENDING,
+            cid: _cid
+        });
+
+        _openProposalIds.increment();
+
+        emit OpenProposalSubmitted(
+            openProposalId,
+            _cid
+        );
+    }
+
 
     function validateProposal(uint256 _profileId, uint256 _tenantId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
         Lease storage lease = leases[_leaseId];
@@ -356,7 +405,10 @@ contract Lease {
         emit LeaseUpdated(_tenantId, proposal.totalNumberOfRents, proposal.startDate);
     }
 
+
     function updateProposal() external {}
+
+    function updateOpenProposal() external {}
 
     /**
      * @notice Called by the tenant to update the lease metadata
@@ -383,7 +435,7 @@ contract Lease {
      * @param _leaseId The id of the lease
      */
     function declineLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
@@ -401,7 +453,7 @@ contract Lease {
      * @param _leaseId The id of the lease
      */
     function validateLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
@@ -442,7 +494,7 @@ contract Lease {
         uint256 _rentId,
         bool _withoutIssues
     ) external payable onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
@@ -489,7 +541,7 @@ contract Lease {
         uint256 _rentId,
         bool _withoutIssues
     ) external payable onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
@@ -533,7 +585,7 @@ contract Lease {
         bool _withoutIssues,
         uint256 _amountInSmallestDecimal
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
 
@@ -583,7 +635,7 @@ contract Lease {
         uint256 _leaseId,
         uint256 _rentId
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
 
         Lease memory _lease = leases[_leaseId];
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
@@ -616,7 +668,7 @@ contract Lease {
         uint256 _leaseId,
         uint256 _rentId
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
 
         //        Lease storage lease = leases[_leaseId];
         Lease memory _lease = leases[_leaseId];
@@ -639,7 +691,7 @@ contract Lease {
      * @param _leaseId The id of the lease
      */
     function cancelLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease does not exist");
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
@@ -676,7 +728,7 @@ contract Lease {
         uint256 _leaseId,
         string calldata _reviewUri
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
 
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
@@ -796,6 +848,11 @@ contract Lease {
         string metaData
     );
 
+    event OpenProposalSubmitted(
+        uint256 openProposalId,
+        string cid
+    );
+
     event RentPaymentIssueStatusUpdated(uint256 leaseId, uint256 rentId, bool withoutIssues);
 
     event CryptoRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount);
@@ -842,7 +899,7 @@ contract Lease {
      */
     modifier tenantCheck(uint256 _profileId, uint256 _leaseId) {
         require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
@@ -857,7 +914,7 @@ contract Lease {
      */
     modifier ownerCheck(uint256 _profileId, uint256 _leaseId) {
         require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-        require(_leaseId <= _tokenIds.current(), "Lease: Lease does not exist");
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.ownerId, "Lease: Only the owner can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
