@@ -491,7 +491,9 @@ contract Lease {
 
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
-        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending");
+        require(rentPayment.paymentStatus != PaymentStatus.PAID
+        || rentPayment.paymentStatus != PaymentStatus.CANCELLED
+        || rentPayment.paymentStatus != PaymentStatus.CONFLICT, "Payment is not pending");
 
         if (lease.paymentData.paymentToken == address(0)) {
             require(msg.value == lease.paymentData.rentAmount, "Non-matching funds");
@@ -532,13 +534,16 @@ contract Lease {
         require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        require(rentPayment.paymentStatus != PaymentStatus.PAID
+        || rentPayment.paymentStatus != PaymentStatus.CANCELLED
+        || rentPayment.paymentStatus != PaymentStatus.CONFLICT, "Payment is not pending");
+
         //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
-        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
         (int256 exchangeRate, uint256 date) = rateOracle.getRate(lease.paymentData.currencyPair);
         rentPayment.exchangeRate = exchangeRate;
@@ -576,16 +581,19 @@ contract Lease {
         require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
         Lease memory lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
         //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
         RentPayment memory rentPayment = lease.rentPayments[_rentId];
 
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+        require(rentPayment.paymentStatus != PaymentStatus.PAID
+        || rentPayment.paymentStatus != PaymentStatus.CANCELLED
+        || rentPayment.paymentStatus != PaymentStatus.CONFLICT, "Payment is not pending");
+
         //TODO Do we keep this ?
         require(block.timestamp >= lease.startDate + lease.rentPaymentInterval * _rentId, "Payment not due");
-        require(rentPayment.paymentStatus == PaymentStatus.PENDING, "Payment is not pending, please contact the owner");
 
         IERC20 token = IERC20(lease.paymentData.paymentToken);
 
@@ -618,31 +626,31 @@ contract Lease {
      * @param _rentId The id of the rent
      * @dev Only the owner of the lease can call this function
      */
-//    function markRentAsNotPaid(
-//        uint256 _profileId,
-//        uint256 _leaseId,
-//        uint256 _rentId
-//    ) external onlyTrustOwner(_profileId) {
-//        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-//
-//        Lease memory _lease = leases[_leaseId];
-//        require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
-//        require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
-//        require(
-//            block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId,
-//            "Lease: Tenant still has time to pay"
-//        );
-//
-//        RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
-//        //        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
-//
-//        require(_rentPayment.paymentStatus == PaymentStatus.PENDING, "Lease: Payment status should be PENDING");
-//
-//        _updateRentStatus(_leaseId, _rentId, PaymentStatus.NOT_PAID);
-//        _updateLeaseAndPaymentsStatuses(_leaseId);
-//
-//        emit RentNotPaid(_leaseId, _rentId);
-//    }
+    function markRentAsNotPaid(
+        uint256 _profileId,
+        uint256 _leaseId,
+        uint256 _rentId
+    ) external onlyTrustOwner(_profileId) {
+        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+
+        Lease memory _lease = leases[_leaseId];
+        require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
+        require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
+        require(
+            block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId,
+            "Lease: Tenant still has time to pay"
+        );
+
+        RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
+        //        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
+
+        require(_rentPayment.paymentStatus != PaymentStatus.PAID, "Lease: Payment status should be PENDING");
+
+        _updateRentStatus(_leaseId, _rentId, PaymentStatus.NOT_PAID);
+        _updateLeaseAndPaymentsStatuses(_leaseId);
+
+        emit RentNotPaid(_leaseId, _rentId);
+    }
 
     /**
      * @notice Can be called by the owner to set a NOT_PAID rent back to PENDING, to give the tenant a possibility to pay his rent
@@ -699,6 +707,7 @@ contract Lease {
             for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
                 RentPayment storage rentPayment = lease.rentPayments[i];
                 if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
+                    //TODO add here the logic to mark as NOT_PAID the overdue rent payments ?
                     _updateRentPaymentStatus(_leaseId, i, PaymentStatus.CANCELLED);
                 }
             }
