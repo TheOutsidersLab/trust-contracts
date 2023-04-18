@@ -360,7 +360,7 @@ contract Lease {
     }
 
     /**
-     * @notice Function called by the owner to create a new open lease
+     * @notice Function called by a potential tenant to create a new open proposal
      * @param _profileId The id of the proposal maker
      * @param _cid The cid of the metadata with the proposal details
      */
@@ -369,10 +369,10 @@ contract Lease {
         string calldata _cid
     ) external onlyTrustOwner(_profileId) {
         uint256 openProposalId = _openProposalIds.current();
-        openProposals[openProposalId] = Proposal({
+        openProposals[openProposalId] = OpenProposal({
             ownerId: _profileId,
             status: ProposalStatus.PENDING,
-            metaData: _cid
+            cid: _cid
         });
 
         _openProposalIds.increment();
@@ -405,7 +405,10 @@ contract Lease {
         emit LeaseUpdated(_tenantId, proposal.totalNumberOfRents, proposal.startDate);
     }
 
+
     function updateProposal() external {}
+
+    function updateOpenProposal() external {}
 
     /**
      * @notice Called by the tenant to update the lease metadata
