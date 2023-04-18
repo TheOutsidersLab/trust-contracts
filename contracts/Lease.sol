@@ -637,12 +637,11 @@ contract Lease {
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
         require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
         require(
-            block.timestamp > _lease.startDate + _lease.rentPaymentLimitTime * _rentId,
+            block.timestamp > _lease.startDate + _lease.rentPaymentInterval + _lease.rentPaymentInterval * _rentId,
             "Lease: Tenant still has time to pay"
         );
 
         RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
-        //        RentPayment storage rentPayment = _lease.rentPayments[_rentId];
 
         require(_rentPayment.paymentStatus != PaymentStatus.PAID, "Lease: Payment status should be PENDING");
 
@@ -708,7 +707,7 @@ contract Lease {
                 RentPayment storage rentPayment = lease.rentPayments[i];
                 if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                     //TODO add here the logic to mark as NOT_PAID the overdue rent payments ?
-                    _updateRentPaymentStatus(_leaseId, i, PaymentStatus.CANCELLED);
+                    _updateRentStatus(_leaseId, i, PaymentStatus.CANCELLED);
                 }
             }
             _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -770,7 +769,7 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _paymentStatus The new payment status
      */
-    function _updateRentPaymentStatus(
+    function _updateRentStatus(
         uint256 _leaseId,
         uint256 _rentId,
         PaymentStatus _paymentStatus
