@@ -53,12 +53,9 @@ contract TrustId is ERC721, Ownable {
      */
     address private leastContractAddress;
 
-
     // =========================== Errors ==============================
 
-
     // =========================== Initializers ==============================
-
 
     constructor() ERC721("UserId", "TID") {
         // Increment counter to start profile ids at index 1
@@ -75,7 +72,7 @@ contract TrustId is ERC721, Ownable {
     }
 
     /**
-     * @notice Check whether a Trust ID is valid.
+     * @notice Checks whether a Trust ID is valid.
      * @param _profileId The Trust ID to check
      */
     function isValid(uint256 _profileId) external view {
@@ -90,7 +87,6 @@ contract TrustId is ERC721, Ownable {
     function ownersOf(uint256 _tokenId1, uint256 _tokenId2) external view returns (address, address) {
         return (ownerOf(_tokenId1), ownerOf(_tokenId2));
     }
-
 
     // =========================== User functions ==============================
 
@@ -111,22 +107,20 @@ contract TrustId is ERC721, Ownable {
      * @param _newCid New IPFS URI
      */
     function updateProfileData(uint256 _tokenId, string memory _newCid) external {
-        require(ownerOf(_tokenId) == msg.sender);
+        require(ownerOf(_tokenId) == msg.sender, "UserId: caller is not the owner");
         require(bytes(_newCid).length > 0, "Should provide a valid IPFS URI");
         profiles[_tokenId].dataUri = _newCid;
 
         emit CidUpdated(_tokenId, _newCid);
     }
 
-
     // =========================== Owner functions ==============================
-
 
     function updateLeaseContractAddress(address _leaseContractAddress) external onlyOwner {
         require(_leaseContractAddress != address(0), "UserId: lease contract address cannot be zero address");
         leastContractAddress = _leaseContractAddress;
+        //TODO add event here
     }
-
 
     // =========================== Private functions ===========================
 
@@ -150,7 +144,6 @@ contract TrustId is ERC721, Ownable {
     }
 
     // =========================== Internal functions ==========================
-
 
     // =========================== Overrides ==============================
 
@@ -191,22 +184,22 @@ contract TrustId is ERC721, Ownable {
             )
         );
         return
-        string(
-        abi.encodePacked(
-        "data:application/json;base64,",
-        Base64.encode(
-        bytes(
-        abi.encodePacked(
-        '{"name":"',
-        username,
-        '", "image":"',
-        image,
-        unicode'", "description": "User User ID"}'
-        )
-        )
-        )
-        )
-        );
+            string(
+                abi.encodePacked(
+                    "data:application/json;base64,",
+                    Base64.encode(
+                        bytes(
+                            abi.encodePacked(
+                                '{"name":"',
+                                username,
+                                '", "image":"',
+                                image,
+                                unicode'", "description": "User User ID"}'
+                            )
+                        )
+                    )
+                )
+            );
     }
 
     // =========================== Modifiers ==============================
@@ -240,12 +233,10 @@ contract TrustId is ERC721, Ownable {
      */
     event CidUpdated(uint256 indexed _tokenId, string _newCid);
 
-
     // =========================== Modifiers ==============================
 
     modifier onlyLeaseContract() {
-        require(msg.sender == leastContractAddress,
-            "UserId: Only the lease contract can call this function");
+        require(msg.sender == leastContractAddress, "UserId: Only the lease contract can call this function");
         _;
     }
 }

@@ -30,16 +30,16 @@ contract FakeIexecRateOracle is Ownable {
     constructor() {
         _callId.increment();
         iexecOracle = Oracle(oracleAddress);
-        rateIndexToOracleKey['EUR-ETH'] = 0x86bb403e4f69c1bb69a6968c4301a2c625418a9cd5a6bbea7c5c1154bde66350;
-        rateIndexToOracleKey['USD-ETH'] = 0x3b2a4f0ea99be0c500ece0ce3c4444bc48c3121e73efde91be84bc6f579b088c;
-        rateIndexToOracleKey['USD-SHI'] = 0x3b2a4f0ea99be0c500ece0ce3c4444bc48c3121e73efde91be84bc6f579b088c;
+        rateIndexToOracleKey["EUR-ETH"] = 0x86bb403e4f69c1bb69a6968c4301a2c625418a9cd5a6bbea7c5c1154bde66350;
+        rateIndexToOracleKey["USD-ETH"] = 0x3b2a4f0ea99be0c500ece0ce3c4444bc48c3121e73efde91be84bc6f579b088c;
+        rateIndexToOracleKey["USD-SHI"] = 0x3b2a4f0ea99be0c500ece0ce3c4444bc48c3121e73efde91be84bc6f579b088c;
     }
 
     function addOrUpdateOracleKey(string memory _rateIndex, bytes32 _oracleKey) external onlyOwner {
         rateIndexToOracleKey[_rateIndex] = _oracleKey;
     }
 
-    function updateOracleAddress (address _oracleAddress) external onlyOwner {
+    function updateOracleAddress(address _oracleAddress) external onlyOwner {
         oracleAddress = _oracleAddress;
     }
 
