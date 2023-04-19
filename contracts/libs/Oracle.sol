@@ -17,13 +17,17 @@
  ******************************************************************************/
 
 pragma solidity >=0.6.12;
+
 /**
  * @dev Any contract which implements this GenericOracle contract should add its
  * own protection logic reponsible of securing the `_updateValue(..)` method.
  */
 abstract contract Oracle {
-    function getRaw(bytes32)public view virtual returns (bytes memory, uint256);
-    function getString(bytes32)public view virtual returns (string memory, uint256);
+    function getRaw(bytes32) public view virtual returns (bytes memory, uint256);
+
+    function getString(bytes32) public view virtual returns (string memory, uint256);
+
     function getInt(bytes32) public view virtual returns (int256, uint256);
+
     function getBool(bytes32) public view virtual returns (bool, uint256);
 }

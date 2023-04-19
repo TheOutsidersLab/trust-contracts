@@ -6,19 +6,17 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-
 /**
  * @title Platform ID Contract
  * @author Quentin D.C
  */
-contract PlatformID is ERC721, AccessControl {
+contract PlatformId is ERC721, AccessControl {
     using Counters for Counters.Counter;
 
     uint8 constant MIN_HANDLE_LENGTH = 5;
     uint8 constant MAX_HANDLE_LENGTH = 31;
 
     // =========================== Enum ==============================
-
 
     // =========================== Variables ==============================
 
@@ -73,7 +71,6 @@ contract PlatformID is ERC721, AccessControl {
      * @notice Platform Id counter
      */
     Counters.Counter private nextPlatformId;
-
 
     // =========================== Errors ==============================
 
@@ -224,7 +221,6 @@ contract PlatformID is ERC721, AccessControl {
         emit OriginValidatedProposalFeeRateUpdated(_platformId, _originValidatedProposalFeeRate);
     }
 
-
     /**
      * @notice Allows a platform to update the lease posting fee for the platform
      * @param _platformId The platform Id of the platform
@@ -251,7 +247,6 @@ contract PlatformID is ERC721, AccessControl {
         emit ProposalPostingFeeUpdated(_platformId, _proposalPostingFee);
     }
 
-
     // =========================== Owner functions ==============================
 
     /**
@@ -270,7 +265,6 @@ contract PlatformID is ERC721, AccessControl {
         (bool sent, ) = payable(msg.sender).call{value: address(this).balance}("");
         require(sent, "Failed to withdraw Ether");
     }
-
 
     // =========================== Private functions ==============================
 
@@ -321,11 +315,8 @@ contract PlatformID is ERC721, AccessControl {
     /**
      * @dev See {IERC165-supportsInterface}.
      */
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(ERC721, AccessControl) returns (bool) {
-        return
-        ERC721.supportsInterface(interfaceId) || AccessControl.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, AccessControl) returns (bool) {
+        return ERC721.supportsInterface(interfaceId) || AccessControl.supportsInterface(interfaceId);
     }
 
     /**
@@ -366,24 +357,23 @@ contract PlatformID is ERC721, AccessControl {
             )
         );
         return
-        string(
-        abi.encodePacked(
-        "data:application/json;base64,",
-        Base64.encode(
-        bytes(
-        abi.encodePacked(
-        '{"name":"',
-        platformName,
-        '", "image":"',
-        image,
-        unicode'", "description": "Platform ID"}'
-        )
-        )
-        )
-        )
-        );
+            string(
+                abi.encodePacked(
+                    "data:application/json;base64,",
+                    Base64.encode(
+                        bytes(
+                            abi.encodePacked(
+                                '{"name":"',
+                                platformName,
+                                '", "image":"',
+                                image,
+                                unicode'", "description": "Platform ID"}'
+                            )
+                        )
+                    )
+                )
+            );
     }
-
 
     // =========================== Modifiers ==============================
 
@@ -419,12 +409,7 @@ contract PlatformID is ERC721, AccessControl {
      * @param platformName Name of the platform
      * @param fee Fee paid to mint the Platform ID
      */
-    event Mint(
-        address indexed platformOwnerAddress,
-        uint256 platformId,
-        string platformName,
-        uint256 fee
-    );
+    event Mint(address indexed platformOwnerAddress, uint256 platformId, string platformName, uint256 fee);
 
     /**
      * @notice Emit when Cid is updated for a platform.
@@ -466,5 +451,4 @@ contract PlatformID is ERC721, AccessControl {
      * @param proposalPostingFee The new fee
      */
     event ProposalPostingFeeUpdated(uint256 platformId, uint256 proposalPostingFee);
-
 }

@@ -5,23 +5,23 @@ export enum Network {
   KOVAN = 42,
   GOERLI = 5,
   MUMBAI = 80001,
-  BNB = 97
+  BNB = 97,
 }
 
 export type NetworkConfig = {
-  proofOfHumanityAddress: string;
-};
+  proofOfHumanityAddress: string
+}
 
 const kovan: NetworkConfig = {
-  proofOfHumanityAddress: "",
-};
+  proofOfHumanityAddress: '',
+}
 
-const local = {} as NetworkConfig;
-const mainnet = {} as NetworkConfig;
-const gnosis = {} as NetworkConfig;
-const goerli = {} as NetworkConfig;
-const mumbai = {} as NetworkConfig;
-const bnb = {} as NetworkConfig;
+const local = {} as NetworkConfig
+const mainnet = {} as NetworkConfig
+const gnosis = {} as NetworkConfig
+const goerli = {} as NetworkConfig
+const mumbai = {} as NetworkConfig
+const bnb = {} as NetworkConfig
 
 export const configs: { [networkId in Network]: NetworkConfig } = {
   [Network.LOCAL]: local,
@@ -31,8 +31,8 @@ export const configs: { [networkId in Network]: NetworkConfig } = {
   [Network.GOERLI]: goerli,
   [Network.MUMBAI]: mumbai,
   [Network.BNB]: bnb,
-};
+}
 
 export const getConfig = (networkId: Network): NetworkConfig => {
-  return configs[networkId];
-};
+  return configs[networkId]
+}
