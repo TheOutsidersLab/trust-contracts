@@ -75,7 +75,7 @@ contract TrustId is ERC721, Ownable {
     }
 
     /**
-     * @notice Check whether a Trust ID is valid.
+     * @notice Checks whether a Trust ID is valid.
      * @param _profileId The Trust ID to check
      */
     function isValid(uint256 _profileId) external view {
@@ -111,7 +111,7 @@ contract TrustId is ERC721, Ownable {
      * @param _newCid New IPFS URI
      */
     function updateProfileData(uint256 _tokenId, string memory _newCid) external {
-        require(ownerOf(_tokenId) == msg.sender);
+        require(ownerOf(_tokenId) == msg.sender, "UserId: caller is not the owner");
         require(bytes(_newCid).length > 0, "Should provide a valid IPFS URI");
         profiles[_tokenId].dataUri = _newCid;
 
@@ -125,6 +125,7 @@ contract TrustId is ERC721, Ownable {
     function updateLeaseContractAddress(address _leaseContractAddress) external onlyOwner {
         require(_leaseContractAddress != address(0), "UserId: lease contract address cannot be zero address");
         leastContractAddress = _leaseContractAddress;
+        //TODO add event here
     }
 
 
