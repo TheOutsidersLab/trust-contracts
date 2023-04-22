@@ -150,6 +150,16 @@ contract PlatformId is ERC721, AccessControl {
     }
 
     /**
+     * @notice Allows retrieval of a Platform
+     * @param _platformId The Platform Id
+     * @return The Platform
+     */
+    function getPlatform(uint256 _platformId) external view returns (Platform memory) {
+        isValid(_platformId);
+        return platforms[_platformId];
+    }
+
+    /**
      * @dev Returns the total number of tokens in existence.
      */
     function totalSupply() public view returns (uint256) {

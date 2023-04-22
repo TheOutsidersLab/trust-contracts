@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IexecRateOracle} from "./IexecRateOracle.sol";
 import {FakeIexecRateOracle} from "./FakeIexecOracle.sol";
 import {TrustId} from "./TrustId.sol";
+import {PlatformId} from "./PlatformId.sol";
 
 /**
  * @title Lease
@@ -184,12 +185,14 @@ contract Lease {
     TrustId trustIdContract;
     //    FakeIexecOracle rateOracle;
     IexecRateOracle rateOracle;
+    PlatformId platformIdContract;
 
-    constructor(address _trustIdContract, address _rateOracle) {
+    constructor(address _trustIdContract, address _rateOracle, address _platformIdContract) {
         _leaseIds.increment();
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);
+        platformIdContract = PlatformId(_platformIdContract);
     }
 
     // =========================== View functions ==============================
@@ -260,14 +263,18 @@ contract Lease {
             _leaseIds.current(),
             _tenantId,
             lease.ownerId,
-            _rentAmount,
             _totalNumberOfRents,
-            _paymentToken,
-            _rentPaymentInterval,
             _startDate,
-            _currencyPair,
+            _rentPaymentInterval,
             _platformId
             //            "cid"
+        );
+
+        emit LeasePaymentDataUpdated(
+            _leaseIds.current(),
+            _rentAmount,
+            _paymentToken,
+            _currencyPair
         );
 
         uint256 leaseId = _leaseIds.current();
@@ -316,14 +323,18 @@ contract Lease {
             _leaseIds.current(),
             0,
             _profileId,
-            _rentAmount,
             0,
-            _paymentToken,
-            _rentPaymentInterval,
             _startDate,
-            _currencyPair,
+            _rentPaymentInterval,
             _platformId
             //            _metaData
+        );
+
+        emit LeasePaymentDataUpdated(
+            _leaseIds.current(),
+            _rentAmount,
+            _paymentToken,
+            _currencyPair
         );
 
         uint256 leaseId = _leaseIds.current();
@@ -823,14 +834,18 @@ contract Lease {
         uint256 leaseId,
         uint256 tenantId,
         uint256 ownerId,
-        uint256 rentAmount,
         uint8 totalNumberOfRents,
-        address paymentToken,
-        uint256 rentPaymentInterval,
         uint256 startDate,
-        string currencyPair,
+        uint256 rentPaymentInterval,
         uint256 platformId
         //        string metadata
+    );
+
+    event LeasePaymentDataUpdated(
+        uint256 leaseId,
+        uint256 rentAmount,
+        address paymentToken,
+        string currencyPair
     );
 
     event LeaseUpdated(uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate);
