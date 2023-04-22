@@ -25,10 +25,10 @@ contract PlatformId is ERC721, AccessControl {
      * @param id the Platform Id
      * @param name the name of the platform
      * @param dataUri the IPFS URI of the Platform metadata
-     * @param originServiceFeeRate the %fee (per ten thousands) asked by the platform for each service created on the platform.
+     * @param originLEaseFeeRate the %fee (per ten thousands) asked by the platform for each lease created on the platform.
      *        This fee is paid by the Lease creator to the platform on which the lease was created, as a percentage of each payment.
-     * @param originValidatedProposalFeeRate the %fee (per ten thousands) asked by the platform for each validated service on the platform
-     *        This fee is paid by the Lease creator to the platform on which the lease was validated, as a percentage of each payment.
+     * @param originProposalFeeRate the %fee (per ten thousands) asked by the platform for each created proposal on the platform
+     *        This fee is paid by the Lease creator to the platform on which the proposal was created, as a percentage of each payment.
      * @param servicePostingFee the fee (flat) asked by the platform to post a service on the platform
      * @param proposalPostingFee the fee (flat) asked by the platform to post a proposal on the platform
      */
@@ -37,7 +37,7 @@ contract PlatformId is ERC721, AccessControl {
         string name;
         string dataUri;
         uint16 originLeaseFeeRate;
-        uint16 originValidatedProposalFeeRate;
+        uint16 originProposalFeeRate;
         uint256 leasePostingFee;
         uint256 proposalPostingFee;
     }
@@ -124,9 +124,9 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformId The Platform Id
      * @return The Platform proposal fee
      */
-    function getOriginValidatedProposalFeeRate(uint256 _platformId) external view returns (uint16) {
+    function getOriginProposalFeeRate(uint256 _platformId) external view returns (uint16) {
         isValid(_platformId);
-        return platforms[_platformId].originValidatedProposalFeeRate;
+        return platforms[_platformId].originProposalFeeRate;
     }
 
     /**
@@ -211,14 +211,14 @@ contract PlatformId is ERC721, AccessControl {
     /**
      * @notice Allows a platform to update its Proposal fee
      * @param _platformId The Platform Id
-     * @param _originValidatedProposalFeeRate Platform fee to update
+     * @param _originProposalFeeRate Platform fee to update
      */
-    function updateOriginValidatedProposalFeeRate(
+    function updateOriginProposalFeeRate(
         uint256 _platformId,
-        uint16 _originValidatedProposalFeeRate
+        uint16 _originProposalFeeRate
     ) public onlyPlatformOwner(_platformId) {
-        platforms[_platformId].originValidatedProposalFeeRate = _originValidatedProposalFeeRate;
-        emit OriginValidatedProposalFeeRateUpdated(_platformId, _originValidatedProposalFeeRate);
+        platforms[_platformId].originProposalFeeRate = _originProposalFeeRate;
+        emit OriginProposalFeeRateUpdated(_platformId, _originProposalFeeRate);
     }
 
     /**
@@ -432,11 +432,11 @@ contract PlatformId is ERC721, AccessControl {
     event OriginLeaseFeeRateUpdated(uint256 platformId, uint16 originLeaseFeeRate);
 
     /**
-     * @notice Emitted when the origin validated proposal fee is updated for a platform
+     * @notice Emitted when the origin proposal fee is updated for a platform
      * @param platformId The Platform Id
-     * @param originValidatedProposalFeeRate The new fee
+     * @param originProposalFeeRate The new fee
      */
-    event OriginValidatedProposalFeeRateUpdated(uint256 platformId, uint16 originValidatedProposalFeeRate);
+    event OriginProposalFeeRateUpdated(uint256 platformId, uint16 originProposalFeeRate);
 
     /**
      * @notice Emitted when the lease posting fee is updated for a platform
