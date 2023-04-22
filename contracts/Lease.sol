@@ -62,6 +62,7 @@ contract Lease {
      * @param cancellation Lease cancellation related data
      * @param rentPayments Array of all the rent payments of the lease
      * @param metaData Metadata of the lease
+     * @param platformId The id of the platform on which the Lease was created
      */
     struct Lease {
         uint256 ownerId;
@@ -75,6 +76,7 @@ contract Lease {
         Cancellation cancellation;
         LeaseStatus status;
         RentPayment[] rentPayments;
+        uint256 platformId;
     }
 
     /**
@@ -119,12 +121,14 @@ contract Lease {
      * @param ownerId The id of the profile
      * @param totalNumberOfRents The amount of rent payments for the lease
      * @param startDate The start date of the lease
+     * @param platformId The id of the platform on which the Proposal was created
      * @param metaData Metadata of the proposal
      */
     struct Proposal {
         uint256 ownerId;
         uint8 totalNumberOfRents;
         uint256 startDate;
+        uint256 platformId;
         string metaData;
     }
 
@@ -132,11 +136,13 @@ contract Lease {
      * @notice Struct for a proposal
      * @param ownerId The id of the proposal owner
      * @param status The status of the proposal
+     * @param platformId The id of the platform on which the Proposal was created
      * @param cid The IPFS cid of the proposal's metadata
      */
     struct OpenProposal {
         uint256 ownerId;
         ProposalStatus status;
+        uint256 platformId;
         string cid;
     }
 
@@ -221,6 +227,7 @@ contract Lease {
      * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
      * @param _startDate The start date of the lease
      */
+    //TODO consider removing "_ownerId" if ever signature is implemented
     function createLease(
         uint256 _ownerId,
         uint256 _tenantId,
@@ -229,7 +236,8 @@ contract Lease {
         address _paymentToken,
         uint256 _rentPaymentInterval,
         string calldata _currencyPair,
-        uint256 _startDate
+        uint256 _startDate,
+        uint256 _platformId
     ) external onlyTrustOwner(_ownerId) returns (uint256) {
         Lease storage lease = leases[_leaseIds.current()];
         lease.ownerId = _ownerId;
@@ -241,6 +249,7 @@ contract Lease {
         lease.rentPaymentInterval = _rentPaymentInterval;
         lease.startDate = _startDate;
         lease.status = LeaseStatus.PENDING;
+        lease.platformId = _platformId;
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
         for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
@@ -256,7 +265,8 @@ contract Lease {
             _paymentToken,
             _rentPaymentInterval,
             _startDate,
-            _currencyPair
+            _currencyPair,
+            _platformId
             //            "cid"
         );
 
@@ -281,7 +291,8 @@ contract Lease {
         address _paymentToken,
         uint256 _rentPaymentInterval,
         string calldata _currencyPair,
-        uint256 _startDate
+        uint256 _startDate,
+        uint256 _platformId
     )
         external
         //        string calldata _metaData
@@ -298,6 +309,7 @@ contract Lease {
         lease.rentPaymentInterval = _rentPaymentInterval;
         lease.startDate = _startDate;
         lease.status = LeaseStatus.PENDING;
+        lease.platformId = _platformId;
         //        lease.metaData = _metaData;
 
         emit LeaseCreated(
@@ -309,7 +321,8 @@ contract Lease {
             _paymentToken,
             _rentPaymentInterval,
             _startDate,
-            _currencyPair
+            _currencyPair,
+            _platformId
             //            _metaData
         );
 
@@ -325,6 +338,7 @@ contract Lease {
      * @param _leaseId The id of the lease
      * @param _totalNumberOfRents The amount of rent payments for the lease
      * @param _startDate The start date of the lease
+     * @param _platformId The id of the platform on which the proposal was created
      * @param _cid The cid of the metadata
      */
     function submitProposal(
@@ -332,6 +346,7 @@ contract Lease {
         uint256 _leaseId,
         uint8 _totalNumberOfRents,
         uint256 _startDate,
+        uint256 _platformId,
         string calldata _cid
     ) external onlyTrustOwner(_profileId) {
         _validateProposal(_leaseId, _profileId, _cid);
@@ -340,10 +355,11 @@ contract Lease {
             ownerId: _profileId,
             totalNumberOfRents: _totalNumberOfRents,
             startDate: _startDate,
+            platformId : _platformId,
             metaData: _cid
         });
 
-        emit ProposalSubmitted(_leaseId, _profileId, _totalNumberOfRents, _startDate, _cid);
+        emit ProposalSubmitted(_leaseId, _profileId, _totalNumberOfRents, _startDate, _platformId, _cid);
     }
 
     /**
@@ -351,13 +367,13 @@ contract Lease {
      * @param _profileId The id of the proposal maker
      * @param _cid The cid of the metadata with the proposal details
      */
-    function createOpenProposal(uint256 _profileId, string calldata _cid) external onlyTrustOwner(_profileId) {
+    function createOpenProposal(uint256 _profileId, uint256 _platformId, string calldata _cid) external onlyTrustOwner(_profileId) {
         uint256 openProposalId = _openProposalIds.current();
-        openProposals[openProposalId] = OpenProposal({ownerId: _profileId, status: ProposalStatus.PENDING, cid: _cid});
+        openProposals[openProposalId] = OpenProposal({ownerId: _profileId, status: ProposalStatus.PENDING, platformId : _platformId , cid: _cid});
 
         _openProposalIds.increment();
 
-        emit OpenProposalSubmitted(openProposalId, _cid);
+        emit OpenProposalSubmitted(openProposalId, _platformId, _cid);
     }
 
     function validateProposal(
@@ -425,7 +441,7 @@ contract Lease {
         emit UpdateLeaseStatus(_leaseId, LeaseStatus.CANCELLED);
     }
 
-    //TODO check if this is still ok with open Leases
+    //TODO check if this is still ok with open Leases (tenantId == 0 should prevent spam validation, but consider adding an OPEN status for clarity & filtering)
     /**
      * @notice Called by the tenant to validate the lease
      * @param _profileId The id of the owner
@@ -812,7 +828,8 @@ contract Lease {
         address paymentToken,
         uint256 rentPaymentInterval,
         uint256 startDate,
-        string currencyPair
+        string currencyPair,
+        uint256 platformId
         //        string metadata
     );
 
@@ -823,10 +840,11 @@ contract Lease {
         uint256 tenantId,
         uint8 totalNumberOfRents,
         uint256 startDate,
+        uint256 platformId,
         string metaData
     );
 
-    event OpenProposalSubmitted(uint256 openProposalId, string cid);
+    event OpenProposalSubmitted(uint256 openProposalId, uint256 platformId, string cid);
 
     event RentPaymentIssueStatusUpdated(uint256 leaseId, uint256 rentId, bool withoutIssues);
 
