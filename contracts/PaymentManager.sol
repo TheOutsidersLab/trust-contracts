@@ -77,7 +77,7 @@ contract PaymentManager is AccessControl {
      */
     function updateProtocolFeeRate(uint16 _protocolFeeRate) public onlyRole(DEFAULT_ADMIN_ROLE) {
         protocolFeeRate = _protocolFeeRate;
-//        emit ProtocolFeeRateUpdated(_protocolFeeRate);
+        emit ProtocolFeeRateUpdated(_protocolFeeRate);
     }
 
     /**
@@ -292,4 +292,10 @@ contract PaymentManager is AccessControl {
         int256 exchangeRate,
         uint256 exchangeRateTimestamp
     );
+
+    /**
+     * @notice Emitted after the protocol fee was updated
+     * @param _protocolFeeRate The new protocol fee
+     */
+    event ProtocolFeeRateUpdated(uint16 _protocolFeeRate);
 }

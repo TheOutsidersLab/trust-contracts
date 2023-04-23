@@ -93,10 +93,6 @@ interface ILease {
 
     function getLease(uint256 _leaseId) external view returns (Lease memory lease);
 
-    function updateProtocolFeeRate(uint16 _protocolFeeRate) external;
-
-    function updateProtocolWallet(address payable _protocolWallet) external;
-
     function createLease(
         uint256 _ownerId,
         uint256 _tenantId,
