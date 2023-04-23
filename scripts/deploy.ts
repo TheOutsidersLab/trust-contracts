@@ -11,9 +11,10 @@ task('deploy', 'Deploys contracts')
   .addFlag('cancelLease', 'Rents paid & not paid & lease is cancelled')
   .addFlag('openLease', 'OpenLease workflow')
   .setAction(async (taskArgs, { ethers, run }) => {
-    const { cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth, openLease } = taskArgs
+    const { cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth, openLease } =
+      taskArgs
     const [deployer, croesus, brutus, maximus, aurelius] = await ethers.getSigners()
-    let leaseIdCounter = 1;
+    let leaseIdCounter = 1
     console.log('Deploying contracts with the account:', deployer.address)
     await run('compile')
 
@@ -35,7 +36,11 @@ task('deploy', 'Deploys contracts')
 
     //Deploy Lease
     const Lease = await ethers.getContractFactory('Lease')
-    const leaseArgs: [string, string, string] = [trustIdContract.address, oracleContract.address, platformIdContract.address]
+    const leaseArgs: [string, string, string] = [
+      trustIdContract.address,
+      oracleContract.address,
+      platformIdContract.address,
+    ]
     const leaseContract = await Lease.deploy(...leaseArgs)
     console.log('Lease address:', leaseContract.address)
 
@@ -75,7 +80,6 @@ task('deploy', 'Deploys contracts')
 
     // ********************* Contract Calls *************************
 
-
     // Mint PlatformIds
     const mintTxPlatformId = await platformIdContract.connect(deployer).mint('anywhere')
     await mintTxPlatformId.wait()
@@ -83,10 +87,10 @@ task('deploy', 'Deploys contracts')
     console.log('PlatformId: ', anywherePlatformId)
     console.log('For platform: ', await platformIdContract.platforms(anywherePlatformId))
 
-    await leaseContract.connect(deployer).updateProtocolWallet(deployer.address);
-    await leaseContract.connect(deployer).updateProtocolFeeRate(1000);
+    await leaseContract.connect(deployer).updateProtocolWallet(deployer.address)
+    await leaseContract.connect(deployer).updateProtocolFeeRate(1000)
 
-    await platformIdContract.connect(deployer).updateOriginLeaseFeeRate(1,2000);
+    await platformIdContract.connect(deployer).updateOriginLeaseFeeRate(1, 2000)
 
     // Mint User ids & Give Owner Privileges
 
@@ -129,7 +133,7 @@ task('deploy', 'Deploys contracts')
         1,
         'CRYPTO',
         getCurrentTimestamp(),
-        anywherePlatformId
+        anywherePlatformId,
       )
       await createLeaseTx.wait()
       // console.log('Lease created: ', await leaseContract.leases(1))
@@ -187,14 +191,16 @@ task('deploy', 'Deploys contracts')
         2,
         'CRYPTO',
         getCurrentTimestamp(),
-        anywherePlatformId
+        anywherePlatformId,
       )
       await createLeaseTx.wait()
-      leaseIdCounter++;
+      leaseIdCounter++
       // console.log('Lease created: ', await leaseContract.leases(leaseIdCounter))
 
       //Validate token Lease
-      const validateLeaseTx = await leaseContract.connect(aurelius).validateLease(aureliusUserId, leaseIdCounter)
+      const validateLeaseTx = await leaseContract
+        .connect(aurelius)
+        .validateLease(aureliusUserId, leaseIdCounter)
       await validateLeaseTx.wait()
       const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
@@ -241,14 +247,16 @@ task('deploy', 'Deploys contracts')
           3,
           'USD-SHI',
           getCurrentTimestamp(),
-          anywherePlatformId
+          anywherePlatformId,
         )
       await createLeaseTx.wait()
-      leaseIdCounter++;
+      leaseIdCounter++
       // console.log('Lease created: ', await leaseContract.leases(2))
 
       //Validate token Lease
-      const validateLeaseTx = await leaseContract.connect(aurelius).validateLease(aureliusUserId, leaseIdCounter)
+      const validateLeaseTx = await leaseContract
+        .connect(aurelius)
+        .validateLease(aureliusUserId, leaseIdCounter)
       await validateLeaseTx.wait()
       const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
@@ -303,10 +311,10 @@ task('deploy', 'Deploys contracts')
           0,
           'USD-ETH',
           getCurrentTimestamp(),
-          anywherePlatformId
+          anywherePlatformId,
         )
       await createLeaseTx.wait()
-      leaseIdCounter++;
+      leaseIdCounter++
       // console.log('Lease created: ', await leaseContract.leases(2))
 
       //Validate token Lease
@@ -372,18 +380,33 @@ task('deploy', 'Deploys contracts')
       await cancelOwnerTx.wait()
     }
 
-    if(openLease) {
+    if (openLease) {
       //Create Open lease & proposal for crypto payment
-      const createOpenLeaseTx = await leaseContract.connect(croesus).createOpenLease(// '4',
-        croesusUserId, ethers.utils.parseEther('0.0000000000005'), ethers.constants.AddressZero, '12', 'CRYPTO', getCurrentTimestamp(), anywherePlatformId)
+      const createOpenLeaseTx = await leaseContract.connect(croesus).createOpenLease(
+        // '4',
+        croesusUserId,
+        ethers.utils.parseEther('0.0000000000005'),
+        ethers.constants.AddressZero,
+        '12',
+        'CRYPTO',
+        getCurrentTimestamp(),
+        anywherePlatformId,
+      )
       await createOpenLeaseTx.wait()
-      leaseIdCounter++;
+      leaseIdCounter++
       console.log('Open lease created: ', leaseIdCounter)
 
       //Maximus creates proposal for this lease
       const createProposalTx = await leaseContract
         .connect(maximus)
-        .submitProposal(maximusUserId, leaseIdCounter, 12, getCurrentTimestamp(), anywherePlatformId, 'QmbyAESGfkKQb9sKRoFjTquA2pBKjA22nA8WsoiDPrfCm9',)
+        .submitProposal(
+          maximusUserId,
+          leaseIdCounter,
+          12,
+          getCurrentTimestamp(),
+          anywherePlatformId,
+          'QmbyAESGfkKQb9sKRoFjTquA2pBKjA22nA8WsoiDPrfCm9',
+        )
       await createProposalTx.wait()
       const proposal = await leaseContract.getProposal(leaseIdCounter, maximusUserId)
       console.log('Proposal created by Maximus for lease: ', proposal.ownerId)

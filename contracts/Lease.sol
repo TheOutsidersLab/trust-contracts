@@ -322,12 +322,7 @@ contract Lease is AccessControl {
             //            "cid"
         );
 
-        emit LeasePaymentDataUpdated(
-            _leaseIds.current(),
-            _rentAmount,
-            _paymentToken,
-            _currencyPair
-        );
+        emit LeasePaymentDataUpdated(_leaseIds.current(), _rentAmount, _paymentToken, _currencyPair);
 
         uint256 leaseId = _leaseIds.current();
         _leaseIds.increment();
@@ -352,9 +347,9 @@ contract Lease is AccessControl {
         string calldata _currencyPair,
         uint256 _startDate,
         uint256 _platformId
-    //        string calldata _metaData
     )
-    external
+        external
+        //        string calldata _metaData
         onlyTrustOwner(_profileId)
         returns (uint256)
     {
@@ -382,12 +377,7 @@ contract Lease is AccessControl {
             //            _metaData
         );
 
-        emit LeasePaymentDataUpdated(
-            _leaseIds.current(),
-            _rentAmount,
-            _paymentToken,
-            _currencyPair
-        );
+        emit LeasePaymentDataUpdated(_leaseIds.current(), _rentAmount, _paymentToken, _currencyPair);
 
         uint256 leaseId = _leaseIds.current();
         _leaseIds.increment();
@@ -418,7 +408,7 @@ contract Lease is AccessControl {
             ownerId: _profileId,
             totalNumberOfRents: _totalNumberOfRents,
             startDate: _startDate,
-            platformId : _platformId,
+            platformId: _platformId,
             metaData: _cid
         });
 
@@ -430,9 +420,18 @@ contract Lease is AccessControl {
      * @param _profileId The id of the proposal maker
      * @param _cid The cid of the metadata with the proposal details
      */
-    function createOpenProposal(uint256 _profileId, uint256 _platformId, string calldata _cid) external onlyTrustOwner(_profileId) {
+    function createOpenProposal(
+        uint256 _profileId,
+        uint256 _platformId,
+        string calldata _cid
+    ) external onlyTrustOwner(_profileId) {
         uint256 openProposalId = _openProposalIds.current();
-        openProposals[openProposalId] = OpenProposal({ownerId: _profileId, status: ProposalStatus.PENDING, platformId : _platformId , cid: _cid});
+        openProposals[openProposalId] = OpenProposal({
+            ownerId: _profileId,
+            status: ProposalStatus.PENDING,
+            platformId: _platformId,
+            cid: _cid
+        });
 
         _openProposalIds.increment();
 
@@ -587,15 +586,14 @@ contract Lease is AccessControl {
             IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
                 trustIdContract.ownerOf(lease.ownerId),
-                lease.paymentData.rentAmount - (leaseFeeAmount + protocolFeeAmount));
-            IERC20(lease.paymentData.paymentToken).transferFrom(
-                msg.sender,
-                protocolWallet,
-                (protocolFeeAmount));
+                lease.paymentData.rentAmount - (leaseFeeAmount + protocolFeeAmount)
+            );
+            IERC20(lease.paymentData.paymentToken).transferFrom(msg.sender, protocolWallet, (protocolFeeAmount));
             IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
                 payable(platformIdContract.ownerOf(lease.platformId)),
-                (leaseFeeAmount));
+                (leaseFeeAmount)
+            );
         }
 
         _validateRentPayment(_leaseId, _rentId, _withoutIssues);
@@ -719,15 +717,10 @@ contract Lease is AccessControl {
         token.transferFrom(
             msg.sender,
             trustIdContract.ownerOf(lease.ownerId),
-            _amountInSmallestDecimal - (leaseFeeAmount + protocolFeeAmount));
-        token.transferFrom(
-            msg.sender,
-            protocolWallet,
-            (protocolFeeAmount));
-        token.transferFrom(
-            msg.sender,
-            payable(platformIdContract.ownerOf(lease.platformId)),
-            (leaseFeeAmount));
+            _amountInSmallestDecimal - (leaseFeeAmount + protocolFeeAmount)
+        );
+        token.transferFrom(msg.sender, protocolWallet, (protocolFeeAmount));
+        token.transferFrom(msg.sender, payable(platformIdContract.ownerOf(lease.platformId)), (leaseFeeAmount));
 
         _validateRentPayment(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -830,7 +823,6 @@ contract Lease is AccessControl {
         }
     }
 
-
     // =========================== Private functions ===========================
 
     /**
@@ -903,12 +895,7 @@ contract Lease is AccessControl {
         //        string metadata
     );
 
-    event LeasePaymentDataUpdated(
-        uint256 leaseId,
-        uint256 rentAmount,
-        address paymentToken,
-        string currencyPair
-    );
+    event LeasePaymentDataUpdated(uint256 leaseId, uint256 rentAmount, address paymentToken, string currencyPair);
 
     event LeaseUpdated(uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate);
 
@@ -975,33 +962,33 @@ contract Lease is AccessControl {
         _;
     }
 
-//    //TODO Check if this modifier is needed when payment functions are merged
-//    /**
-//     * @notice Restricts the actions to the tenant of the ACTIVE lease
-//     * @param _profileId The Trust ID of the user
-//     * @param _leaseId The ID of the lease
-//     */
-//    modifier tenantCheck(uint256 _profileId, uint256 _leaseId) {
-//        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-//        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-//        Lease memory lease = leases[_leaseId];
-//        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-//        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-//        _;
-//    }
-//
-//    //TODO Check if this modifier is needed when payment functions are merged
-//    /**
-//     * @notice Restricts the actions to the owner of the ACTIVE lease
-//     * @param _profileId The Trust ID of the user
-//     * @param _leaseId The ID of the lease
-//     */
-//    modifier ownerCheck(uint256 _profileId, uint256 _leaseId) {
-//        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-//        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-//        Lease memory lease = leases[_leaseId];
-//        require(_profileId == lease.ownerId, "Lease: Only the owner can call this function");
-//        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-//        _;
-//    }
+    //    //TODO Check if this modifier is needed when payment functions are merged
+    //    /**
+    //     * @notice Restricts the actions to the tenant of the ACTIVE lease
+    //     * @param _profileId The Trust ID of the user
+    //     * @param _leaseId The ID of the lease
+    //     */
+    //    modifier tenantCheck(uint256 _profileId, uint256 _leaseId) {
+    //        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
+    //        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+    //        Lease memory lease = leases[_leaseId];
+    //        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
+    //        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+    //        _;
+    //    }
+    //
+    //    //TODO Check if this modifier is needed when payment functions are merged
+    //    /**
+    //     * @notice Restricts the actions to the owner of the ACTIVE lease
+    //     * @param _profileId The Trust ID of the user
+    //     * @param _leaseId The ID of the lease
+    //     */
+    //    modifier ownerCheck(uint256 _profileId, uint256 _leaseId) {
+    //        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
+    //        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+    //        Lease memory lease = leases[_leaseId];
+    //        require(_profileId == lease.ownerId, "Lease: Only the owner can call this function");
+    //        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
+    //        _;
+    //    }
 }
