@@ -172,7 +172,5 @@ interface ILease {
 
     function validateRentPayment(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external;
 
-    function updateRentStatus(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus) external;
-
     function isValid(uint256 _leaseId) external;
 }
