@@ -609,18 +609,18 @@ contract Lease is AccessControl {
 //        Pay rent to owner & platform & protocol fees
         if (address(0) == lease.paymentData.paymentToken) {
             trustIdContract.ownerOf(lease.ownerId).call{value: msg.value - (leaseFeeAmount + protocolFeeAmount)}("");
-            trustIdContract.ownerOf(address payable(this)).call{value: protocolFeeAmount}("");
-            trustIdContract.ownerOf(payable(platformIdContract.ownerOf(lease.platformId))).call{value: leaseFeeAmount}("");
+            protocolWallet.call{value: protocolFeeAmount}("");
+            platformIdContract.ownerOf(lease.platformId).call{value: leaseFeeAmount}("");
         } else {
-            IERC20(_tokenAddress).transferFrom(
+            IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
                 trustIdContract.ownerOf(lease.ownerId),
                 msg.value - (leaseFeeAmount + protocolFeeAmount));
-            IERC20(_tokenAddress).transferFrom(
+            IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
-                address payable(this),
+                protocolWallet,
                 (protocolFeeAmount));
-            IERC20(_tokenAddress).transferFrom(
+            IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
                 payable(platformIdContract.ownerOf(lease.platformId)),
                 (leaseFeeAmount));
@@ -682,9 +682,9 @@ contract Lease is AccessControl {
 //        platformIdToTokenToBalance[PROTOCOL_INDEX][lease.paymentData.paymentToken] += protocolFeeAmount;
 
         // Pay rent to owner & platform & protocol fees
-        trustIdContract.ownerOf(lease.ownerId).call{value: msg.value - leaseFeeAmount}("");
-        trustIdContract.ownerOf(address payable(this)).call{value: protocolFeeAmount}("");
-        trustIdContract.ownerOf(payable(platformIdContract.ownerOf(lease.platformId))).call{value: leaseFeeAmount}("");
+        trustIdContract.ownerOf(lease.ownerId).call{value: msg.value - (leaseFeeAmount + protocolFeeAmount)}("");
+        protocolWallet.call{value: protocolFeeAmount}("");
+        platformIdContract.ownerOf(lease.platformId).call{value: leaseFeeAmount}("");
 
         _validateRentPayment(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
@@ -756,15 +756,15 @@ contract Lease is AccessControl {
 //        platformIdToTokenToBalance[lease.platformId][lease.paymentData.paymentToken] += leaseFeeAmount;
 //        platformIdToTokenToBalance[PROTOCOL_INDEX][lease.paymentData.paymentToken] += protocolFeeAmount;
 
-        IERC20(_tokenAddress).transferFrom(
+        token.transferFrom(
             msg.sender,
             trustIdContract.ownerOf(lease.ownerId),
-            msg.value - (leaseFeeAmount + protocolFeeAmount));
-        IERC20(_tokenAddress).transferFrom(
+            _amountInSmallestDecimal - (leaseFeeAmount + protocolFeeAmount));
+        token.transferFrom(
             msg.sender,
-            address payable(this),
+            protocolWallet,
             (protocolFeeAmount));
-        IERC20(_tokenAddress).transferFrom(
+        token.transferFrom(
             msg.sender,
             payable(platformIdContract.ownerOf(lease.platformId)),
             (leaseFeeAmount));
