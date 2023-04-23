@@ -36,13 +36,23 @@ task('deploy', 'Deploys contracts')
 
     //Deploy Lease
     const Lease = await ethers.getContractFactory('Lease')
-    const leaseArgs: [string, string, string] = [
+    const leaseArgs: [string, string] = [
       trustIdContract.address,
-      oracleContract.address,
       platformIdContract.address,
     ]
     const leaseContract = await Lease.deploy(...leaseArgs)
     console.log('Lease address:', leaseContract.address)
+
+    //Deploy PaymentManager
+    const PaymentManager = await ethers.getContractFactory('PaymentManager')
+    const paymentManagerArgs: [string, string, string, string] = [
+      trustIdContract.address,
+      oracleContract.address,
+      platformIdContract.address,
+      leaseContract.address,
+    ]
+    const paymentManagerContract = await PaymentManager.deploy(...paymentManagerArgs)
+    console.log('PaymentManager address:', paymentManagerContract.address)
 
     //Add dependency to TenantId contract
     await trustIdContract.updateLeaseContractAddress(leaseContract.address)
@@ -52,10 +62,6 @@ task('deploy', 'Deploys contracts')
     const croesusToken = await CroesusToken.deploy()
     const croesusTokenAddress = croesusToken.address
     console.log('CroesusToken address:', croesusTokenAddress)
-
-    //TODO Deploy PaymentManager
-    //TODO Grant PAYMENT_MANAGER_ROLE to PaymentManager in Lease contract
-
 
     await croesusToken.transfer(brutus.address, ethers.utils.parseEther('1000'))
     await croesusToken.transfer(maximus.address, ethers.utils.parseEther('1000'))
@@ -84,6 +90,10 @@ task('deploy', 'Deploys contracts')
 
     // ********************* Contract Calls *************************
 
+    // Grant PaymentManager Role to PaymentManager
+    let paymentManagerRole = await leaseContract.PAYMENT_MANAGER_ROLE();
+    await leaseContract.connect(deployer).grantRole(paymentManagerRole, paymentManagerContract.address)
+
     // Mint PlatformIds
     const mintTxPlatformId = await platformIdContract.connect(deployer).mint('anywhere')
     await mintTxPlatformId.wait()
@@ -91,8 +101,8 @@ task('deploy', 'Deploys contracts')
     console.log('PlatformId: ', anywherePlatformId)
     console.log('For platform: ', await platformIdContract.platforms(anywherePlatformId))
 
-    await leaseContract.connect(deployer).updateProtocolWallet(deployer.address)
-    await leaseContract.connect(deployer).updateProtocolFeeRate(1000)
+    await paymentManagerContract.connect(deployer).updateProtocolWallet(deployer.address)
+    await paymentManagerContract.connect(deployer).updateProtocolFeeRate(1000)
 
     await platformIdContract.connect(deployer).updateOriginLeaseFeeRate(1, 2000)
 
@@ -158,7 +168,7 @@ task('deploy', 'Deploys contracts')
 
       //Maximus pays 12 rents
       for (let i = 0; i < 12; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(maximus)
           .payCryptoRent(maximusUserId, leaseIdCounter, i, true, {
             value: ethers.utils.parseEther('0.0000000000005'),
@@ -181,7 +191,7 @@ task('deploy', 'Deploys contracts')
 
     if (cryptoRent) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12)
-      await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove)
+      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
 
       //Create token lease
       const createLeaseTx = await leaseContract.connect(croesus).createLease(
@@ -210,7 +220,7 @@ task('deploy', 'Deploys contracts')
 
       //Aurelius pays 12 rents
       for (let i = 0; i < 12; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(aurelius)
           .payCryptoRent(aureliusUserId, leaseIdCounter, i, true)
         await payRentTx.wait()
@@ -234,7 +244,7 @@ task('deploy', 'Deploys contracts')
       await oracleContract.updateRate('USD-ETH')
       await oracleContract.updateRate('USD-SHI')
       // const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12);
-      // await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove);
+      // await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove);
       const aureliusId = await trustIdContract.ids(aurelius.address)
       console.log('Aurelius id ', aureliusId)
 
@@ -274,10 +284,10 @@ task('deploy', 'Deploys contracts')
       console.log('Rent amount in token: ', rentAmountInToken.toString())
 
       const totalAmountToApprove = rentAmountInToken.mul(12)
-      await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove)
+      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
 
       for (let i = 0; i < 12; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(aurelius)
           .payFiatRentInToken(aureliusUserId, leaseIdCounter, i, true, rentAmountInToken)
         await payRentTx.wait()
@@ -298,7 +308,7 @@ task('deploy', 'Deploys contracts')
 
     if (fiatRentPaymentEth) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12)
-      await croesusToken.connect(aurelius).approve(leaseContract.address, totalAmountToApprove)
+      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
       const auralusId = await trustIdContract.ids(aurelius.address)
       console.log('Aurelius id ', auralusId)
 
@@ -336,7 +346,7 @@ task('deploy', 'Deploys contracts')
       console.log('Rent amount in token: ', rentAmountInWei.toString())
 
       for (let i = 0; i < 12; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(aurelius)
           .payFiatRentInEth(aureliusUserId, leaseIdCounter, i, true, { value: rentAmountInWei })
         await payRentTx.wait()
@@ -358,7 +368,7 @@ task('deploy', 'Deploys contracts')
     if (cancelLease) {
       //Maximus pays 4 rents
       for (let i = 0; i < 4; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(maximus)
           .payCryptoRent(maximusUserId, 1, i, true, {
             value: ethers.utils.parseEther('0.0000000000005'),
@@ -367,7 +377,7 @@ task('deploy', 'Deploys contracts')
       }
 
       //Maximus pays rent 7 with issues
-      const payRentTx = await leaseContract
+      const payRentTx = await paymentManagerContract
         .connect(maximus)
         .payCryptoRent(maximusUserId, 1, 7, false, {
           value: ethers.utils.parseEther('0.0000000000005'),
@@ -425,7 +435,7 @@ task('deploy', 'Deploys contracts')
 
       //Maximus pays 8 rents
       for (let i = 0; i < 8; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(maximus)
           .payCryptoRent(maximusUserId, leaseIdCounter, i, true, {
             value: ethers.utils.parseEther('0.0000000000005'),
@@ -436,7 +446,7 @@ task('deploy', 'Deploys contracts')
 
       //Maximus pays 4 rents with issues
       for (let i = 8; i < 12; i++) {
-        const payRentTx = await leaseContract
+        const payRentTx = await paymentManagerContract
           .connect(maximus)
           .payCryptoRent(maximusUserId, leaseIdCounter, i, false, {
             value: ethers.utils.parseEther('0.0000000000005'),
