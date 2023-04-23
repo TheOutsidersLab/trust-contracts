@@ -59,6 +59,7 @@ contract PaymentManager is AccessControl {
     uint16 public protocolFeeRate;
 
     constructor(address _trustIdContract, address _rateOracle, address _platformIdContract, address _leaseContract){
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);

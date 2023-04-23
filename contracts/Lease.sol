@@ -206,11 +206,6 @@ contract Lease is AccessControl {
     PlatformId platformIdContract;
 
     /**
-     * @notice (Upgradable) Wallet which will receive the protocol fees
-     */
-    address payable public protocolWallet;
-
-    /**
      * @notice Percentage paid to the protocol (per 10,000, upgradable)
      */
     uint16 public protocolFeeRate;
@@ -274,14 +269,6 @@ contract Lease is AccessControl {
         emit ProtocolFeeRateUpdated(_protocolFeeRate);
     }
 
-    /**
-     * @notice Updates the Protocol wallet that receive fees
-     * @dev Only the owner can call this function
-     * @param _protocolWallet The new wallet address
-     */
-    function updateProtocolWallet(address payable _protocolWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        protocolWallet = _protocolWallet;
-    }
 
     // =========================== User functions ==============================
 
