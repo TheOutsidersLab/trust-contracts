@@ -2,18 +2,26 @@ import { task } from 'hardhat/config'
 import { ethers } from 'hardhat'
 import { getCurrentTimestamp } from 'hardhat/internal/hardhat-network/provider/utils/getCurrentTimestamp'
 
-// npx hardhat deploy --fiat-rent-payment-eth --fiat-rent-payment-token --crypto-rent --network localhost
+// npx hardhat deploy --fiat-rent-payment-eth --fiat-rent-payment-token --crypto-rent --open-lease --network localhost
 task('deploy', 'Deploys contracts')
   .addFlag('cryptoRent', 'Rents paid & not paid in ETH')
   .addFlag('alreadyDeployed', 'If contracts already deployed')
   .addFlag('fiatRentPaymentToken', 'Rents in fiat payment in token')
   .addFlag('fiatRentPaymentEth', 'Rents in fiat payment in token')
   .addFlag('cancelLease', 'Rents paid & not paid & lease is cancelled')
+  .addFlag('openLease', 'OpenLease workflow')
   .setAction(async (taskArgs, { ethers, run }) => {
-    const { cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth } = taskArgs
+    const { cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth, openLease } =
+      taskArgs
     const [deployer, croesus, brutus, maximus, aurelius] = await ethers.getSigners()
+    let leaseIdCounter = 1
     console.log('Deploying contracts with the account:', deployer.address)
     await run('compile')
+
+    //Deploy PlatformId
+    const PlatformId = await ethers.getContractFactory('PlatformId')
+    const platformIdContract = await PlatformId.deploy()
+    console.log('PlatformId address:', platformIdContract.address)
 
     //Deploy Oracle
     // const Oracle = await ethers.getContractFactory("IexecRateOracle");
@@ -28,7 +36,11 @@ task('deploy', 'Deploys contracts')
 
     //Deploy Lease
     const Lease = await ethers.getContractFactory('Lease')
-    const leaseArgs: [string, string] = [trustIdContract.address, oracleContract.address]
+    const leaseArgs: [string, string, string] = [
+      trustIdContract.address,
+      oracleContract.address,
+      platformIdContract.address,
+    ]
     const leaseContract = await Lease.deploy(...leaseArgs)
     console.log('Lease address:', leaseContract.address)
 
@@ -68,7 +80,19 @@ task('deploy', 'Deploys contracts')
 
     // ********************* Contract Calls *************************
 
-    // Mint Userids & Give Owner Privileges
+    // Mint PlatformIds
+    const mintTxPlatformId = await platformIdContract.connect(deployer).mint('anywhere')
+    await mintTxPlatformId.wait()
+    const anywherePlatformId = await platformIdContract.ids(deployer.address)
+    console.log('PlatformId: ', anywherePlatformId)
+    console.log('For platform: ', await platformIdContract.platforms(anywherePlatformId))
+
+    await leaseContract.connect(deployer).updateProtocolWallet(deployer.address)
+    await leaseContract.connect(deployer).updateProtocolFeeRate(1000)
+
+    await platformIdContract.connect(deployer).updateOriginLeaseFeeRate(1, 2000)
+
+    // Mint User ids & Give Owner Privileges
 
     const mintTxDeployerUser = await trustIdContract.connect(deployer).mint('TheBoss')
     await mintTxDeployerUser.wait()
@@ -109,6 +133,7 @@ task('deploy', 'Deploys contracts')
         1,
         'CRYPTO',
         getCurrentTimestamp(),
+        anywherePlatformId,
       )
       await createLeaseTx.wait()
       // console.log('Lease created: ', await leaseContract.leases(1))
@@ -116,7 +141,7 @@ task('deploy', 'Deploys contracts')
       //Validate Lease
       const validateLeaseTx = await leaseContract.connect(maximus).validateLease(maximusUserId, 1)
       await validateLeaseTx.wait()
-      const lease = await leaseContract.leases(1)
+      const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
 
       // //Reject Lease
@@ -132,7 +157,7 @@ task('deploy', 'Deploys contracts')
       for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract
           .connect(maximus)
-          .payCryptoRent(maximusUserId, 1, i, true, {
+          .payCryptoRent(maximusUserId, leaseIdCounter, i, true, {
             value: ethers.utils.parseEther('0.0000000000005'),
           })
         await payRentTx.wait()
@@ -141,14 +166,14 @@ task('deploy', 'Deploys contracts')
 
       const reviewLeaseTx = await leaseContract
         .connect(maximus)
-        .reviewLease(maximusUserId, 1, 'TenantReviewURI')
+        .reviewLease(maximusUserId, leaseIdCounter, 'TenantReviewURI')
       await reviewLeaseTx.wait()
-      console.log('Maximus reviewed lease: ', 1)
+      console.log('Maximus reviewed lease: ', leaseIdCounter)
       const reviewLeaseTx2 = await leaseContract
         .connect(croesus)
-        .reviewLease(croesusUserId, 1, 'OwnerReviewURI')
+        .reviewLease(croesusUserId, leaseIdCounter, 'OwnerReviewURI')
       await reviewLeaseTx2.wait()
-      console.log('Croesus reviewed lease: ', 1)
+      console.log('Croesus reviewed lease: ', leaseIdCounter)
     }
 
     if (cryptoRent) {
@@ -166,35 +191,39 @@ task('deploy', 'Deploys contracts')
         2,
         'CRYPTO',
         getCurrentTimestamp(),
+        anywherePlatformId,
       )
       await createLeaseTx.wait()
-      // console.log('Lease created: ', await leaseContract.leases(2))
+      leaseIdCounter++
+      // console.log('Lease created: ', await leaseContract.leases(leaseIdCounter))
 
       //Validate token Lease
-      const validateLeaseTx = await leaseContract.connect(aurelius).validateLease(aureliusUserId, 2)
+      const validateLeaseTx = await leaseContract
+        .connect(aurelius)
+        .validateLease(aureliusUserId, leaseIdCounter)
       await validateLeaseTx.wait()
-      const lease = await leaseContract.leases(1)
+      const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
 
       //Aurelius pays 12 rents
       for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract
           .connect(aurelius)
-          .payCryptoRent(aureliusUserId, 2, i, true)
+          .payCryptoRent(aureliusUserId, leaseIdCounter, i, true)
         await payRentTx.wait()
         console.log('Aurelius paid rent: ', i)
       }
 
       const reviewLeaseTx = await leaseContract
         .connect(aurelius)
-        .reviewLease(aureliusUserId, 2, 'TenantReviewURI')
+        .reviewLease(aureliusUserId, leaseIdCounter, 'TenantReviewURI')
       await reviewLeaseTx.wait()
-      console.log('Aurelius reviewed lease: ', 2)
+      console.log('Aurelius reviewed lease: ', leaseIdCounter)
       const reviewLeaseTx2 = await leaseContract
         .connect(croesus)
-        .reviewLease(croesusUserId, 2, 'OwnerReviewURI')
+        .reviewLease(croesusUserId, leaseIdCounter, 'OwnerReviewURI')
       await reviewLeaseTx2.wait()
-      console.log('Croesus reviewed lease: ', 2)
+      console.log('Croesus reviewed lease: ', leaseIdCounter)
     }
 
     if (fiatRentPaymentToken) {
@@ -218,14 +247,18 @@ task('deploy', 'Deploys contracts')
           3,
           'USD-SHI',
           getCurrentTimestamp(),
+          anywherePlatformId,
         )
       await createLeaseTx.wait()
+      leaseIdCounter++
       // console.log('Lease created: ', await leaseContract.leases(2))
 
       //Validate token Lease
-      const validateLeaseTx = await leaseContract.connect(aurelius).validateLease(aureliusUserId, 3)
+      const validateLeaseTx = await leaseContract
+        .connect(aurelius)
+        .validateLease(aureliusUserId, leaseIdCounter)
       await validateLeaseTx.wait()
-      const lease = await leaseContract.leases(3)
+      const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
 
       //Aurelius pays 12 rents
@@ -243,21 +276,21 @@ task('deploy', 'Deploys contracts')
       for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract
           .connect(aurelius)
-          .payFiatRentInToken(aureliusUserId, 3, i, true, rentAmountInToken)
+          .payFiatRentInToken(aureliusUserId, leaseIdCounter, i, true, rentAmountInToken)
         await payRentTx.wait()
         console.log('Aurelius paid rent: ', i)
       }
 
       const reviewLeaseTx = await leaseContract
         .connect(aurelius)
-        .reviewLease(aureliusUserId, 3, 'TenantReviewURI')
+        .reviewLease(aureliusUserId, leaseIdCounter, 'TenantReviewURI')
       await reviewLeaseTx.wait()
-      console.log('Aurelius reviewed lease: ', 3)
+      console.log('Aurelius reviewed lease: ', leaseIdCounter)
       const reviewLeaseTx2 = await leaseContract
         .connect(croesus)
-        .reviewLease(croesusUserId, 3, 'OwnerReviewURI')
+        .reviewLease(croesusUserId, leaseIdCounter, 'OwnerReviewURI')
       await reviewLeaseTx2.wait()
-      console.log('Croesus reviewed lease: ', 3)
+      console.log('Croesus reviewed lease: ', leaseIdCounter)
     }
 
     if (fiatRentPaymentEth) {
@@ -278,14 +311,16 @@ task('deploy', 'Deploys contracts')
           0,
           'USD-ETH',
           getCurrentTimestamp(),
+          anywherePlatformId,
         )
       await createLeaseTx.wait()
+      leaseIdCounter++
       // console.log('Lease created: ', await leaseContract.leases(2))
 
       //Validate token Lease
       const validateLeaseTx = await leaseContract.connect(aurelius).validateLease(aureliusUserId, 4)
       await validateLeaseTx.wait()
-      const lease = await leaseContract.leases(4)
+      const lease = await leaseContract.leases(leaseIdCounter)
       console.log('Lease validated: ', lease.status)
 
       //Aurelius pays 8 rents
@@ -300,21 +335,21 @@ task('deploy', 'Deploys contracts')
       for (let i = 0; i < 12; i++) {
         const payRentTx = await leaseContract
           .connect(aurelius)
-          .payFiatRentInEth(aureliusUserId, 4, i, true, { value: rentAmountInWei })
+          .payFiatRentInEth(aureliusUserId, leaseIdCounter, i, true, { value: rentAmountInWei })
         await payRentTx.wait()
         console.log('Aurelius paid rent: ', i)
       }
 
       const reviewLeaseTx = await leaseContract
         .connect(aurelius)
-        .reviewLease(aureliusUserId, 4, 'TenantReviewURI')
+        .reviewLease(aureliusUserId, leaseIdCounter, 'TenantReviewURI')
       await reviewLeaseTx.wait()
-      console.log('Aurelius reviewed lease', 4)
+      console.log('Aurelius reviewed lease', leaseIdCounter)
       const reviewLeaseTx2 = await leaseContract
         .connect(croesus)
-        .reviewLease(croesusUserId, 4, 'OwnerReviewURI')
+        .reviewLease(croesusUserId, leaseIdCounter, 'OwnerReviewURI')
       await reviewLeaseTx2.wait()
-      console.log('Croesus reviewed lease', 4)
+      console.log('Croesus reviewed lease', leaseIdCounter)
     }
 
     if (cancelLease) {
@@ -345,74 +380,79 @@ task('deploy', 'Deploys contracts')
       await cancelOwnerTx.wait()
     }
 
-    //Create Open lease & proposal for crypto payment
-    const createOpenLeaseTx = await leaseContract.connect(croesus).createOpenLease(
-      // '4',
-      croesusUserId,
-      ethers.utils.parseEther('0.0000000000005'),
-      ethers.constants.AddressZero,
-      '12',
-      'CRYPTO',
-      getCurrentTimestamp(),
-    )
-    await createOpenLeaseTx.wait()
-    console.log('Open lease created: ', 5)
-
-    //Maximus creates proposal for this lease
-    const createProposalTx = await leaseContract
-      .connect(maximus)
-      .submitProposal(
-        maximusUserId,
-        5,
-        12,
+    if (openLease) {
+      //Create Open lease & proposal for crypto payment
+      const createOpenLeaseTx = await leaseContract.connect(croesus).createOpenLease(
+        // '4',
+        croesusUserId,
+        ethers.utils.parseEther('0.0000000000005'),
+        ethers.constants.AddressZero,
+        '12',
+        'CRYPTO',
         getCurrentTimestamp(),
-        'QmbyAESGfkKQb9sKRoFjTquA2pBKjA22nA8WsoiDPrfCm9',
+        anywherePlatformId,
       )
-    await createProposalTx.wait()
-    const proposal = await leaseContract.getProposal(5, maximusUserId)
-    console.log('Proposal created by Maximus for lease: ', proposal.ownerId)
+      await createOpenLeaseTx.wait()
+      leaseIdCounter++
+      console.log('Open lease created: ', leaseIdCounter)
 
-    //Validate Proposal
-    const validateLeaseTx = await leaseContract
-      .connect(croesus)
-      .validateProposal(croesusUserId, maximusUserId, 5)
-    await validateLeaseTx.wait()
-    const lease = await leaseContract.leases(5)
-    console.log('Proposal validated: ', lease.status)
-    console.log('Lease updated: ', lease.status)
-
-    //Maximus pays 8 rents
-    for (let i = 0; i < 8; i++) {
-      const payRentTx = await leaseContract
+      //Maximus creates proposal for this lease
+      const createProposalTx = await leaseContract
         .connect(maximus)
-        .payCryptoRent(maximusUserId, 5, i, true, {
-          value: ethers.utils.parseEther('0.0000000000005'),
-        })
-      await payRentTx.wait()
-      console.log('Maximus paid rent: ', i)
-    }
+        .submitProposal(
+          maximusUserId,
+          leaseIdCounter,
+          12,
+          getCurrentTimestamp(),
+          anywherePlatformId,
+          'QmbyAESGfkKQb9sKRoFjTquA2pBKjA22nA8WsoiDPrfCm9',
+        )
+      await createProposalTx.wait()
+      const proposal = await leaseContract.getProposal(leaseIdCounter, maximusUserId)
+      console.log('Proposal created by Maximus for lease: ', proposal.ownerId)
 
-    //Maximus pays 4 rents with issues
-    for (let i = 8; i < 12; i++) {
-      const payRentTx = await leaseContract
+      //Validate Proposal
+      const validateLeaseTx = await leaseContract
+        .connect(croesus)
+        .validateProposal(croesusUserId, maximusUserId, leaseIdCounter)
+      await validateLeaseTx.wait()
+      const lease = await leaseContract.leases(leaseIdCounter)
+      console.log('Proposal validated: ', lease.status)
+      console.log('Lease updated: ', lease.status)
+
+      //Maximus pays 8 rents
+      for (let i = 0; i < 8; i++) {
+        const payRentTx = await leaseContract
+          .connect(maximus)
+          .payCryptoRent(maximusUserId, leaseIdCounter, i, true, {
+            value: ethers.utils.parseEther('0.0000000000005'),
+          })
+        await payRentTx.wait()
+        console.log('Maximus paid rent: ', i)
+      }
+
+      //Maximus pays 4 rents with issues
+      for (let i = 8; i < 12; i++) {
+        const payRentTx = await leaseContract
+          .connect(maximus)
+          .payCryptoRent(maximusUserId, leaseIdCounter, i, false, {
+            value: ethers.utils.parseEther('0.0000000000005'),
+          })
+        await payRentTx.wait()
+        console.log('Maximus paid rent: ', i)
+      }
+
+      const reviewLeaseTx = await leaseContract
         .connect(maximus)
-        .payCryptoRent(maximusUserId, 5, i, false, {
-          value: ethers.utils.parseEther('0.0000000000005'),
-        })
-      await payRentTx.wait()
-      console.log('Maximus paid rent: ', i)
+        .reviewLease(maximusUserId, leaseIdCounter, 'TenantReviewURI')
+      await reviewLeaseTx.wait()
+      console.log('Maximus reviewed lease: ', leaseIdCounter)
+      const reviewLeaseTx2 = await leaseContract
+        .connect(croesus)
+        .reviewLease(croesusUserId, leaseIdCounter, 'OwnerReviewURI')
+      await reviewLeaseTx2.wait()
+      console.log('Croesus reviewed lease: ', leaseIdCounter)
     }
-
-    const reviewLeaseTx = await leaseContract
-      .connect(maximus)
-      .reviewLease(maximusUserId, 5, 'TenantReviewURI')
-    await reviewLeaseTx.wait()
-    console.log('Maximus reviewed lease: ', 5)
-    const reviewLeaseTx2 = await leaseContract
-      .connect(croesus)
-      .reviewLease(croesusUserId, 5, 'OwnerReviewURI')
-    await reviewLeaseTx2.wait()
-    console.log('Croesus reviewed lease: ', 5)
 
     console.log('***********************************************************************')
     console.log('***********************************************************************')

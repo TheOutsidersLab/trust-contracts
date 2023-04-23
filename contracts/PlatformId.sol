@@ -25,10 +25,10 @@ contract PlatformId is ERC721, AccessControl {
      * @param id the Platform Id
      * @param name the name of the platform
      * @param dataUri the IPFS URI of the Platform metadata
-     * @param originServiceFeeRate the %fee (per ten thousands) asked by the platform for each service created on the platform.
+     * @param originLEaseFeeRate the %fee (per ten thousands) asked by the platform for each lease created on the platform.
      *        This fee is paid by the Lease creator to the platform on which the lease was created, as a percentage of each payment.
-     * @param originValidatedProposalFeeRate the %fee (per ten thousands) asked by the platform for each validated service on the platform
-     *        This fee is paid by the Lease creator to the platform on which the lease was validated, as a percentage of each payment.
+     * @param originProposalFeeRate the %fee (per ten thousands) asked by the platform for each created proposal on the platform
+     *        This fee is paid by the Lease creator to the platform on which the proposal was created, as a percentage of each payment.
      * @param servicePostingFee the fee (flat) asked by the platform to post a service on the platform
      * @param proposalPostingFee the fee (flat) asked by the platform to post a proposal on the platform
      */
@@ -37,7 +37,7 @@ contract PlatformId is ERC721, AccessControl {
         string name;
         string dataUri;
         uint16 originLeaseFeeRate;
-        uint16 originValidatedProposalFeeRate;
+        uint16 originProposalFeeRate;
         uint256 leasePostingFee;
         uint256 proposalPostingFee;
     }
@@ -70,7 +70,7 @@ contract PlatformId is ERC721, AccessControl {
     /**
      * @notice Platform Id counter
      */
-    Counters.Counter private nextPlatformId;
+    Counters.Counter private _nextPlatformId;
 
     // =========================== Errors ==============================
 
@@ -93,7 +93,7 @@ contract PlatformId is ERC721, AccessControl {
 
     constructor() ERC721("UserId", "TID") {
         // Increment counter to start profile ids at index 1
-        nextPlatformId.increment();
+        _nextPlatformId.increment();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(MINT_ROLE, msg.sender);
         mintFee = 0;
@@ -106,7 +106,7 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformId The Platform Id.
      */
     function isValid(uint256 _platformId) public view {
-        require(_platformId > 0 && _platformId < nextPlatformId.current(), "Invalid platform ID");
+        require(_platformId > 0 && _platformId < _nextPlatformId.current(), "Invalid platform ID");
     }
 
     /**
@@ -124,9 +124,9 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformId The Platform Id
      * @return The Platform proposal fee
      */
-    function getOriginValidatedProposalFeeRate(uint256 _platformId) external view returns (uint16) {
+    function getOriginProposalFeeRate(uint256 _platformId) external view returns (uint16) {
         isValid(_platformId);
-        return platforms[_platformId].originValidatedProposalFeeRate;
+        return platforms[_platformId].originProposalFeeRate;
     }
 
     /**
@@ -150,10 +150,20 @@ contract PlatformId is ERC721, AccessControl {
     }
 
     /**
+     * @notice Allows retrieval of a Platform
+     * @param _platformId The Platform Id
+     * @return The Platform
+     */
+    function getPlatform(uint256 _platformId) external view returns (Platform memory) {
+        isValid(_platformId);
+        return platforms[_platformId];
+    }
+
+    /**
      * @dev Returns the total number of tokens in existence.
      */
     function totalSupply() public view returns (uint256) {
-        return nextPlatformId.current() - 1;
+        return _nextPlatformId.current() - 1;
     }
 
     // =========================== User functions ==============================
@@ -163,7 +173,7 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformName Platform name
      */
     function mint(string calldata _platformName) public payable canMint(_platformName, msg.sender) returns (uint256) {
-        _mint(msg.sender, nextPlatformId.current());
+        _mint(msg.sender, _nextPlatformId.current());
         return _afterMint(_platformName, msg.sender);
     }
 
@@ -177,7 +187,7 @@ contract PlatformId is ERC721, AccessControl {
         string calldata _platformName,
         address _platformAddress
     ) public payable canMint(_platformName, _platformAddress) onlyRole(MINT_ROLE) returns (uint256) {
-        _mint(_platformAddress, nextPlatformId.current());
+        _mint(_platformAddress, _nextPlatformId.current());
         return _afterMint(_platformName, _platformAddress);
     }
 
@@ -211,14 +221,14 @@ contract PlatformId is ERC721, AccessControl {
     /**
      * @notice Allows a platform to update its Proposal fee
      * @param _platformId The Platform Id
-     * @param _originValidatedProposalFeeRate Platform fee to update
+     * @param _originProposalFeeRate Platform fee to update
      */
-    function updateOriginValidatedProposalFeeRate(
+    function updateOriginProposalFeeRate(
         uint256 _platformId,
-        uint16 _originValidatedProposalFeeRate
+        uint16 _originProposalFeeRate
     ) public onlyPlatformOwner(_platformId) {
-        platforms[_platformId].originValidatedProposalFeeRate = _originValidatedProposalFeeRate;
-        emit OriginValidatedProposalFeeRateUpdated(_platformId, _originValidatedProposalFeeRate);
+        platforms[_platformId].originProposalFeeRate = _originProposalFeeRate;
+        emit OriginProposalFeeRateUpdated(_platformId, _originProposalFeeRate);
     }
 
     /**
@@ -275,8 +285,8 @@ contract PlatformId is ERC721, AccessControl {
      * @dev Increments the nextTokenId counter.
      */
     function _afterMint(string memory _platformName, address _platformAddress) private returns (uint256) {
-        uint256 platformId = nextPlatformId.current();
-        nextPlatformId.increment();
+        uint256 platformId = _nextPlatformId.current();
+        _nextPlatformId.increment();
         Platform storage platform = platforms[platformId];
         platform.name = _platformName;
         platform.id = platformId;
@@ -432,11 +442,11 @@ contract PlatformId is ERC721, AccessControl {
     event OriginLeaseFeeRateUpdated(uint256 platformId, uint16 originLeaseFeeRate);
 
     /**
-     * @notice Emitted when the origin validated proposal fee is updated for a platform
+     * @notice Emitted when the origin proposal fee is updated for a platform
      * @param platformId The Platform Id
-     * @param originValidatedProposalFeeRate The new fee
+     * @param originProposalFeeRate The new fee
      */
-    event OriginValidatedProposalFeeRateUpdated(uint256 platformId, uint16 originValidatedProposalFeeRate);
+    event OriginProposalFeeRateUpdated(uint256 platformId, uint16 originProposalFeeRate);
 
     /**
      * @notice Emitted when the lease posting fee is updated for a platform
