@@ -70,7 +70,7 @@ contract PlatformId is ERC721, AccessControl {
     /**
      * @notice Platform Id counter
      */
-    Counters.Counter private nextPlatformId;
+    Counters.Counter private _nextPlatformId;
 
     // =========================== Errors ==============================
 
@@ -93,7 +93,7 @@ contract PlatformId is ERC721, AccessControl {
 
     constructor() ERC721("UserId", "TID") {
         // Increment counter to start profile ids at index 1
-        nextPlatformId.increment();
+        _nextPlatformId.increment();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(MINT_ROLE, msg.sender);
         mintFee = 0;
@@ -106,7 +106,7 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformId The Platform Id.
      */
     function isValid(uint256 _platformId) public view {
-        require(_platformId > 0 && _platformId < nextPlatformId.current(), "Invalid platform ID");
+        require(_platformId > 0 && _platformId < _nextPlatformId.current(), "Invalid platform ID");
     }
 
     /**
@@ -163,7 +163,7 @@ contract PlatformId is ERC721, AccessControl {
      * @dev Returns the total number of tokens in existence.
      */
     function totalSupply() public view returns (uint256) {
-        return nextPlatformId.current() - 1;
+        return _nextPlatformId.current() - 1;
     }
 
     // =========================== User functions ==============================
@@ -173,7 +173,7 @@ contract PlatformId is ERC721, AccessControl {
      * @param _platformName Platform name
      */
     function mint(string calldata _platformName) public payable canMint(_platformName, msg.sender) returns (uint256) {
-        _mint(msg.sender, nextPlatformId.current());
+        _mint(msg.sender, _nextPlatformId.current());
         return _afterMint(_platformName, msg.sender);
     }
 
@@ -187,7 +187,7 @@ contract PlatformId is ERC721, AccessControl {
         string calldata _platformName,
         address _platformAddress
     ) public payable canMint(_platformName, _platformAddress) onlyRole(MINT_ROLE) returns (uint256) {
-        _mint(_platformAddress, nextPlatformId.current());
+        _mint(_platformAddress, _nextPlatformId.current());
         return _afterMint(_platformName, _platformAddress);
     }
 
@@ -285,8 +285,8 @@ contract PlatformId is ERC721, AccessControl {
      * @dev Increments the nextTokenId counter.
      */
     function _afterMint(string memory _platformName, address _platformAddress) private returns (uint256) {
-        uint256 platformId = nextPlatformId.current();
-        nextPlatformId.increment();
+        uint256 platformId = _nextPlatformId.current();
+        _nextPlatformId.increment();
         Platform storage platform = platforms[platformId];
         platform.name = _platformName;
         platform.id = platformId;

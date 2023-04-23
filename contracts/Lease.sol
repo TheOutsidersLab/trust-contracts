@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -18,7 +19,7 @@ import {PlatformId} from "./PlatformId.sol";
 //TODO ownable for updatable slippage ?
 //TODO Add require on payment type (enum ?)
 
-contract Lease {
+contract Lease is AccessControl {
     // =========================== Enums & Structs =============================
     using Counters for Counters.Counter;
     Counters.Counter private _leaseIds;
@@ -64,6 +65,7 @@ contract Lease {
      * @param rentPayments Array of all the rent payments of the lease
      * @param metaData Metadata of the lease
      * @param platformId The id of the platform on which the Lease was created
+     * @param proposalId In case of an Open Lease or Open Proposal, the id of the proposal linked to the lease. 0 if no proposal.
      */
     struct Lease {
         uint256 ownerId;
@@ -76,8 +78,9 @@ contract Lease {
         ReviewStatus reviewStatus;
         Cancellation cancellation;
         LeaseStatus status;
-        RentPayment[] rentPayments;
+        TransactionPayment[] rentPayments;
         uint256 platformId;
+        uint256 proposalId;
     }
 
     /**
@@ -148,14 +151,14 @@ contract Lease {
     }
 
     /**
-     * @notice Struct for rent payments
-     * @param validationDate The timestamp of the rent status update
+     * @notice Struct for Transaction payments
+     * @param validationDate The timestamp of the transaction status update
      * @param withoutIssues True is the tenant had no issues with the rented property during this rent period
      * @param exchangeRate Exchange rate between the rent currency and the payment token | "0" if rent in token or ETH
      * @param exchangeRateTimestamp Timestamp of the exchange rate | "0" if rent in token or ETH
      * @param paymentStatus The status of the payment
      */
-    struct RentPayment {
+    struct TransactionPayment {
         uint256 validationDate;
         bool withoutIssues;
         int256 exchangeRate;
@@ -163,7 +166,7 @@ contract Lease {
         PaymentStatus paymentStatus;
     }
 
-    // =========================== Mappings ==============================
+    // =========================== Declarations ==============================
 
     /**
      * @notice Mapping of all leases
@@ -180,19 +183,61 @@ contract Lease {
      */
     mapping(uint256 => OpenProposal) public openProposals;
 
+    /**
+     * @notice Mapping from platformId to Token address to Token Balance
+     *         Represents the amount of ETH or token present on this contract which
+     *         belongs to a platform and can be withdrawn.
+     * @dev Id 0 (PROTOCOL_INDEX) is reserved to the protocol balance
+     * @dev address(0) is reserved to ETH balance
+     */
+    mapping(uint256 => mapping(address => uint256)) private platformIdToTokenToBalance;
+
     //    string[] public availableCurrency = ['CRYPTO', 'USD', 'EUR'];
 
+    /**
+     * @notice Instance of TrustId.sol contract
+     */
     TrustId trustIdContract;
     //    FakeIexecOracle rateOracle;
+
+    /**
+     * @notice Instance of IexecRateOracle.sol contract
+     */
     IexecRateOracle rateOracle;
+
+    /**
+     * @notice Instance of PlatformId.sol contract
+     */
     PlatformId platformIdContract;
+
+    /**
+     * @notice (Upgradable) Wallet which will receive the protocol fees
+     */
+    address payable public protocolWallet;
+
+    /**
+     * @notice Percentage paid to the protocol (per 10,000, upgradable)
+     */
+    uint16 public protocolFeeRate;
+
+    /**
+     * @notice The index of the protocol in the "platformIdToTokenToBalance" mapping
+     */
+    uint8 private constant PROTOCOL_INDEX = 0;
+
+    /**
+     * @notice The fee divider used for every fee rates
+     */
+    uint16 private constant FEE_DIVIDER = 10000;
 
     constructor(address _trustIdContract, address _rateOracle, address _platformIdContract) {
         _leaseIds.increment();
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);
         platformIdContract = PlatformId(_platformIdContract);
+        updateProtocolFeeRate(100);
     }
 
     // =========================== View functions ==============================
@@ -202,7 +247,7 @@ contract Lease {
      * @param _leaseId The id of the lease
      * @return rentPayments The array of all rent payments of the lease
      */
-    function getPayments(uint256 _leaseId) external view returns (RentPayment[] memory rentPayments) {
+    function getPayments(uint256 _leaseId) external view returns (TransactionPayment[] memory rentPayments) {
         Lease storage lease = leases[_leaseId];
         return lease.rentPayments;
     }
@@ -215,6 +260,27 @@ contract Lease {
      */
     function getProposal(uint256 _leaseId, uint256 _ownerId) external view returns (Proposal memory proposal) {
         return proposals[_leaseId][_ownerId];
+    }
+
+    // =========================== Owner functions ==============================
+
+    /**
+     * @notice Updates the Protocol Fee rate
+     * @dev Only the owner can call this function
+     * @param _protocolFeeRate The new protocol fee
+     */
+    function updateProtocolFeeRate(uint16 _protocolFeeRate) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        protocolFeeRate = _protocolFeeRate;
+        emit ProtocolFeeRateUpdated(_protocolFeeRate);
+    }
+
+    /**
+     * @notice Updates the Protocol wallet that receive fees
+     * @dev Only the owner can call this function
+     * @param _protocolWallet The new wallet address
+     */
+    function updateProtocolWallet(address payable _protocolWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        protocolWallet = _protocolWallet;
     }
 
     // =========================== User functions ==============================
@@ -256,7 +322,7 @@ contract Lease {
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
         for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
-            lease.rentPayments.push(RentPayment(0, false, 0, 0, PaymentStatus.PENDING));
+            lease.rentPayments.push(TransactionPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
         emit LeaseCreated(
@@ -401,10 +467,11 @@ contract Lease {
         lease.tenantId = proposal.ownerId;
         lease.totalNumberOfRents = proposal.totalNumberOfRents;
         lease.startDate = proposal.startDate;
+        lease.proposalId = _tenantId;
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
         for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
-            lease.rentPayments.push(RentPayment(0, false, 0, 0, PaymentStatus.PENDING));
+            lease.rentPayments.push(TransactionPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
         lease.status = LeaseStatus.ACTIVE;
@@ -505,7 +572,7 @@ contract Lease {
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        RentPayment memory rentPayment = lease.rentPayments[_rentId];
+        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(
             rentPayment.paymentStatus != PaymentStatus.PAID ||
@@ -520,17 +587,33 @@ contract Lease {
             require(msg.value == 0, "Non-matching funds");
         }
 
+        // Dispatch Lease & Protocol fees
+        uint16 leaseFee = platformIdContract.getOriginLeaseFeeRate(lease.platformId);
+        uint256 leaseFeeAmount = (lease.paymentData.rentAmount * leaseFee) / FEE_DIVIDER;
+        uint256 protocolFeeAmount = (lease.paymentData.rentAmount * protocolFeeRate) / FEE_DIVIDER;
+
+        platformIdToTokenToBalance[lease.platformId][lease.paymentData.paymentToken] += leaseFeeAmount;
+        platformIdToTokenToBalance[PROTOCOL_INDEX][lease.paymentData.paymentToken] += protocolFeeAmount;
+
+
+        // Pay rent to owner
         if (lease.paymentData.paymentToken != address(0)) {
             IERC20(lease.paymentData.paymentToken).transferFrom(
                 msg.sender,
                 trustIdContract.ownerOf(lease.ownerId),
-                lease.paymentData.rentAmount
+                lease.paymentData.rentAmount - (leaseFeeAmount + protocolFeeAmount)
             );
         } else {
-            payable(msg.sender).transfer(msg.value);
+            payable(msg.sender).transfer(msg.value - (leaseFeeAmount + protocolFeeAmount));
         }
+        //        TODO Check to implement this instead of the above
+        //        if (address(0) == lease.paymentData.paymentToken) {
+        //            IERC20(_tokenAddress).transfer(trustIdContract.ownerOf(lease.ownerId), msg.value - leaseFeeAmount);
+        //        } else {
+        //            _recipient.call{value: msg.value - leaseFeeAmount}("");
+        //        }
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, msg.value);
@@ -555,7 +638,7 @@ contract Lease {
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
-        RentPayment memory rentPayment = lease.rentPayments[_rentId];
+        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(
             rentPayment.paymentStatus != PaymentStatus.PAID ||
@@ -574,11 +657,11 @@ contract Lease {
         // exchangeRate: in wei/Fiat | rentAmount in fiat currency
         uint256 rentAmountInWei = lease.paymentData.rentAmount * (uint256(exchangeRate));
 
-        require(msg.value >= (rentAmountInWei - (rentAmountInWei * slippage) / 10000), "Wrong rent value");
+        require(msg.value >= (rentAmountInWei - (rentAmountInWei * slippage) / FEE_DIVIDER), "Wrong rent value");
 
         payable(msg.sender).transfer(msg.value);
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, msg.value, exchangeRate, date);
@@ -608,7 +691,7 @@ contract Lease {
         //TODO Will be implemented when exchangeRate switched to an index
         //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
 
-        RentPayment memory rentPayment = lease.rentPayments[_rentId];
+        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
 
         require(
             rentPayment.paymentStatus != PaymentStatus.PAID ||
@@ -632,13 +715,13 @@ contract Lease {
         uint256 rentAmountInToken = lease.paymentData.rentAmount * (uint256(exchangeRate));
 
         require(
-            _amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / 10000),
+            _amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / FEE_DIVIDER),
             "Wrong rent value"
         );
 
         token.transferFrom(msg.sender, trustIdContract.ownerOf(lease.ownerId), _amountInSmallestDecimal);
 
-        _payRent(_leaseId, _rentId, _withoutIssues);
+        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
         _updateLeaseAndPaymentsStatuses(_leaseId);
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
@@ -666,7 +749,7 @@ contract Lease {
             "Lease: Tenant still has time to pay"
         );
 
-        RentPayment memory _rentPayment = _lease.rentPayments[_rentId];
+        TransactionPayment memory _rentPayment = _lease.rentPayments[_rentId];
 
         require(_rentPayment.paymentStatus != PaymentStatus.PAID, "Lease: Payment status should be PENDING");
 
@@ -729,7 +812,7 @@ contract Lease {
 
         if (lease.cancellation.cancelledByOwner && lease.cancellation.cancelledByTenant) {
             for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
-                RentPayment storage rentPayment = lease.rentPayments[i];
+                TransactionPayment storage rentPayment = lease.rentPayments[i];
                 if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                     //TODO add here the logic to mark as NOT_PAID the overdue rent payments ?
                     _updateRentStatus(_leaseId, i, PaymentStatus.CANCELLED);
@@ -769,6 +852,32 @@ contract Lease {
         }
     }
 
+    //TODO finalize
+//    /**
+//     * @notice Allows a platform owner to claim its tokens & / or ETH balance.
+//     * @param _platformId The ID of the platform claiming the balance.
+//     * @param _tokenAddress The address of the Token contract (address(0) if balance in ETH).
+//     * Emits a BalanceTransferred event
+//     */
+//    function claim(uint256 _platformId, address _tokenAddress) external whenNotPaused {
+//        address payable recipient;
+//
+//        if (owner() == _msgSender()) {
+//            require(_platformId == PROTOCOL_INDEX, "Access denied");
+//            recipient = protocolWallet;
+//        } else {
+//            talentLayerPlatformIdContract.isValid(_platformId);
+//            recipient = payable(talentLayerPlatformIdContract.ownerOf(_platformId));
+//        }
+//
+//        uint256 amount = platformIdToTokenToBalance[_platformId][_tokenAddress];
+//        require(amount > 0, "nothing to claim");
+//        platformIdToTokenToBalance[_platformId][_tokenAddress] = 0;
+//        _safeTransferBalance(recipient, _tokenAddress, amount);
+//
+//        emit FeesClaimed(_platformId, _tokenAddress, amount);
+//    }
+
     // =========================== Private functions ===========================
 
     /**
@@ -777,8 +886,8 @@ contract Lease {
      * @param _rentId The rent payment id
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
      */
-    function _payRent(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
-        RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
+    function _validateRentPayment(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
+        TransactionPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = PaymentStatus.PAID;
         rentPayment.withoutIssues = _withoutIssues;
         rentPayment.validationDate = block.timestamp;
@@ -791,7 +900,7 @@ contract Lease {
      * @param _paymentStatus The new payment status
      */
     function _updateRentStatus(uint256 _leaseId, uint256 _rentId, PaymentStatus _paymentStatus) private {
-        RentPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
+        TransactionPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = _paymentStatus;
     }
 
@@ -804,7 +913,7 @@ contract Lease {
         Lease storage lease = leases[_leaseId];
 
         for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
-            RentPayment storage rentPayment = lease.rentPayments[i];
+            TransactionPayment storage rentPayment = lease.rentPayments[i];
             if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                 return;
             }
@@ -887,6 +996,20 @@ contract Lease {
     event LeaseReviewedByTenant(uint256 leaseId, string reviewUri);
 
     event LeaseMetaDataUpdated(uint256 leaseId, string metaData);
+
+    /**
+     * @notice Emitted after the protocol fee was updated
+     * @param _protocolFeeRate The new protocol fee
+     */
+    event ProtocolFeeRateUpdated(uint16 _protocolFeeRate);
+
+    /**
+     * @notice Emitted after a platform withdraws its balance
+     * @param _platformId The Platform ID to which the balance is transferred.
+     * @param _token The address of the token used for the payment.
+     * @param _amount The amount transferred.
+     */
+    event FeesClaimed(uint256 _platformId, address indexed _token, uint256 _amount);
 
     // =========================== Modifiers ==============================
 
