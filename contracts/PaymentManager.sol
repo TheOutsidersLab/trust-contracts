@@ -60,6 +60,7 @@ contract PaymentManager is AccessControl {
 
     constructor(address _trustIdContract, address _rateOracle, address _platformIdContract, address _leaseContract){
         trustIdContract = TrustId(_trustIdContract);
+        //        rateOracle = FakeIexecOracle(_rateOracle);
         rateOracle = IexecRateOracle(_rateOracle);
         platformIdContract = PlatformId(_platformIdContract);
         leaseContract = ILease(_leaseContract);

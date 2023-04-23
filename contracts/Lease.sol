@@ -5,8 +5,6 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IexecRateOracle} from "./IexecRateOracle.sol";
-import {FakeIexecRateOracle} from "./FakeIexecOracle.sol";
 import {TrustId} from "./TrustId.sol";
 import {PlatformId} from "./PlatformId.sol";
 
@@ -201,12 +199,6 @@ contract Lease is AccessControl {
      * @notice Instance of TrustId.sol contract
      */
     TrustId trustIdContract;
-    //    FakeIexecOracle rateOracle;
-
-    /**
-     * @notice Instance of IexecRateOracle.sol contract
-     */
-    IexecRateOracle rateOracle;
 
     /**
      * @notice Instance of PlatformId.sol contract
@@ -223,12 +215,10 @@ contract Lease is AccessControl {
      */
     uint16 public protocolFeeRate;
 
-    constructor(address _trustIdContract, address _rateOracle, address _platformIdContract) {
+    constructor(address _trustIdContract, address _platformIdContract) {
         _leaseIds.increment();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         trustIdContract = TrustId(_trustIdContract);
-        //        rateOracle = FakeIexecOracle(_rateOracle);
-        rateOracle = IexecRateOracle(_rateOracle);
         platformIdContract = PlatformId(_platformIdContract);
         updateProtocolFeeRate(100);
     }
