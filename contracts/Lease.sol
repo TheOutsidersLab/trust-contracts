@@ -259,17 +259,6 @@ contract Lease is AccessControl {
 
     // =========================== Owner functions ==============================
 
-    /**
-     * @notice Updates the Protocol Fee rate
-     * @dev Only the owner can call this function
-     * @param _protocolFeeRate The new protocol fee
-     */
-    function updateProtocolFeeRate(uint16 _protocolFeeRate) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        protocolFeeRate = _protocolFeeRate;
-        emit ProtocolFeeRateUpdated(_protocolFeeRate);
-    }
-
-
     // =========================== User functions ==============================
 
     /**
@@ -739,12 +728,6 @@ contract Lease is AccessControl {
     event LeaseReviewedByTenant(uint256 leaseId, string reviewUri);
 
     event LeaseMetaDataUpdated(uint256 leaseId, string metaData);
-
-    /**
-     * @notice Emitted after the protocol fee was updated
-     * @param _protocolFeeRate The new protocol fee
-     */
-    event ProtocolFeeRateUpdated(uint16 _protocolFeeRate);
 
     /**
      * @notice Emitted after a platform withdraws its balance
