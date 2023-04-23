@@ -53,6 +53,10 @@ task('deploy', 'Deploys contracts')
     const croesusTokenAddress = croesusToken.address
     console.log('CroesusToken address:', croesusTokenAddress)
 
+    //TODO Deploy PaymentManager
+    //TODO Grant PAYMENT_MANAGER_ROLE to PaymentManager in Lease contract
+
+
     await croesusToken.transfer(brutus.address, ethers.utils.parseEther('1000'))
     await croesusToken.transfer(maximus.address, ethers.utils.parseEther('1000'))
     await croesusToken.transfer(aurelius.address, ethers.utils.parseEther('1000'))
@@ -93,7 +97,6 @@ task('deploy', 'Deploys contracts')
     await platformIdContract.connect(deployer).updateOriginLeaseFeeRate(1, 2000)
 
     // Mint User ids & Give Owner Privileges
-
     const mintTxDeployerUser = await trustIdContract.connect(deployer).mint('TheBoss')
     await mintTxDeployerUser.wait()
     const deployerUserId = await trustIdContract.ids(deployer.address)

@@ -25,8 +25,20 @@ contract Lease is AccessControl {
     Counters.Counter private _leaseIds;
     Counters.Counter private _openProposalIds;
 
-    uint64 public constant DIVIDER = 10 ** 18;
+    /**
+     * @notice The fee tolerates slippage percentage for fiat-based payments
+     */
     uint8 private slippage = 200; // per 10_000
+
+    /**
+     * @notice The fee divider used for every fee rates
+     */
+    uint16 private constant FEE_DIVIDER = 10000;
+
+    /**
+     * @notice Role granting Payment Manager permission
+     */
+    bytes32 public constant PAYMENT_MANAGER_ROLE = keccak256("PAYMENT_MANAGER_ROLE");
 
     /**
      * @notice Enum for the status of the rent payments
@@ -211,11 +223,6 @@ contract Lease is AccessControl {
      */
     uint16 public protocolFeeRate;
 
-    /**
-     * @notice The fee divider used for every fee rates
-     */
-    uint16 private constant FEE_DIVIDER = 10000;
-
     constructor(address _trustIdContract, address _rateOracle, address _platformIdContract) {
         _leaseIds.increment();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -246,6 +253,23 @@ contract Lease is AccessControl {
      */
     function getProposal(uint256 _leaseId, uint256 _ownerId) external view returns (Proposal memory proposal) {
         return proposals[_leaseId][_ownerId];
+    }
+
+    /**
+     * @notice Getter for a lease
+     * @param _leaseId The id of the lease
+     * @return lease The Lease
+     */
+    function getLease(uint256 _leaseId) external view returns (Lease memory lease) {
+        return leases[_leaseId];
+    }
+
+    /**
+     * @notice Check whether the Lease Id is valid.
+     * @param _leaseId The Lease Id.
+     */
+    function isValid(uint256 _leaseId) public view {
+        require(_leaseId > 0 && _leaseId <= _leaseIds.current(), "Invalid lease ID");
     }
 
     // =========================== Owner functions ==============================
@@ -493,7 +517,7 @@ contract Lease is AccessControl {
      * @param _leaseId The id of the lease
      */
     function declineLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+        isValid(_leaseId);
 
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
@@ -511,11 +535,11 @@ contract Lease is AccessControl {
      * @param _leaseId The id of the lease
      */
     function validateLease(uint256 _profileId, uint256 _leaseId) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+        isValid(_leaseId);
 
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-        require(lease.status == LeaseStatus.PENDING, "Lease: Lease was already validated");
+        require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not pending");
 
         lease.status = LeaseStatus.ACTIVE;
 
@@ -540,195 +564,6 @@ contract Lease is AccessControl {
     //    }
 
     /**
-     * @notice Used to pay a rent using ETH
-     * @param _profileId The id of the owner
-     * @param _leaseId The id of the lease
-     * @param _rentId The id of the rent
-     * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
-     */
-    function payCryptoRent(
-        uint256 _profileId,
-        uint256 _leaseId,
-        uint256 _rentId,
-        bool _withoutIssues
-    ) external payable onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-        Lease memory lease = leases[_leaseId];
-        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-
-        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
-
-        require(
-            rentPayment.paymentStatus != PaymentStatus.PAID ||
-                rentPayment.paymentStatus != PaymentStatus.CANCELLED ||
-                rentPayment.paymentStatus != PaymentStatus.CONFLICT,
-            "Payment is not pending"
-        );
-
-        if (lease.paymentData.paymentToken == address(0)) {
-            require(msg.value == lease.paymentData.rentAmount, "Non-matching funds");
-        } else {
-            require(msg.value == 0, "Non-matching funds");
-        }
-
-        // Calculate Lease & Protocol fees
-        uint16 leaseFee = platformIdContract.getOriginLeaseFeeRate(lease.platformId);
-        uint256 leaseFeeAmount = (lease.paymentData.rentAmount * leaseFee) / FEE_DIVIDER;
-        uint256 protocolFeeAmount = (lease.paymentData.rentAmount * protocolFeeRate) / FEE_DIVIDER;
-
-        // Pay rent to owner & platform & protocol fees
-        if (address(0) == lease.paymentData.paymentToken) {
-            trustIdContract.ownerOf(lease.ownerId).call{value: msg.value - (leaseFeeAmount + protocolFeeAmount)}("");
-            protocolWallet.call{value: protocolFeeAmount}("");
-            platformIdContract.ownerOf(lease.platformId).call{value: leaseFeeAmount}("");
-        } else {
-            IERC20(lease.paymentData.paymentToken).transferFrom(
-                msg.sender,
-                trustIdContract.ownerOf(lease.ownerId),
-                lease.paymentData.rentAmount - (leaseFeeAmount + protocolFeeAmount)
-            );
-            IERC20(lease.paymentData.paymentToken).transferFrom(msg.sender, protocolWallet, (protocolFeeAmount));
-            IERC20(lease.paymentData.paymentToken).transferFrom(
-                msg.sender,
-                payable(platformIdContract.ownerOf(lease.platformId)),
-                (leaseFeeAmount)
-            );
-        }
-
-        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
-        _updateLeaseAndPaymentsStatuses(_leaseId);
-
-        emit CryptoRentPaid(_leaseId, _rentId, _withoutIssues, msg.value);
-    }
-
-    /**
-     * @notice Used to pay a rent stated in Fiat currency using tokens
-     * @param _profileId The id of the owner
-     * @param _leaseId The id of the lease
-     * @param _rentId The id of the rent
-     * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
-     * @dev Only the registered tenant can call this function
-     */
-    function payFiatRentInEth(
-        uint256 _profileId,
-        uint256 _leaseId,
-        uint256 _rentId,
-        bool _withoutIssues
-    ) external payable onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-        Lease memory lease = leases[_leaseId];
-        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-
-        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
-
-        require(
-            rentPayment.paymentStatus != PaymentStatus.PAID ||
-                rentPayment.paymentStatus != PaymentStatus.CANCELLED ||
-                rentPayment.paymentStatus != PaymentStatus.CONFLICT,
-            "Payment is not pending"
-        );
-
-        (int256 exchangeRate, uint256 date) = rateOracle.getRate(lease.paymentData.currencyPair);
-        rentPayment.exchangeRate = exchangeRate;
-        rentPayment.exchangeRateTimestamp = date;
-
-        // exchangeRate: in wei/Fiat | rentAmount in fiat currency
-        uint256 rentAmountInWei = lease.paymentData.rentAmount * (uint256(exchangeRate));
-
-        require(msg.value >= (rentAmountInWei - (rentAmountInWei * slippage) / FEE_DIVIDER), "Wrong rent value");
-        require(msg.value <= (rentAmountInWei + (rentAmountInWei * slippage) / FEE_DIVIDER), "Wrong rent value");
-
-        // Calculate Lease & Protocol fees
-        uint16 leaseFee = platformIdContract.getOriginLeaseFeeRate(lease.platformId);
-        uint256 leaseFeeAmount = (rentAmountInWei * leaseFee) / FEE_DIVIDER;
-        uint256 protocolFeeAmount = (rentAmountInWei * protocolFeeRate) / FEE_DIVIDER;
-
-        // Pay rent to owner & platform & protocol fees
-        trustIdContract.ownerOf(lease.ownerId).call{value: msg.value - (leaseFeeAmount + protocolFeeAmount)}("");
-        protocolWallet.call{value: protocolFeeAmount}("");
-        platformIdContract.ownerOf(lease.platformId).call{value: leaseFeeAmount}("");
-
-        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
-        _updateLeaseAndPaymentsStatuses(_leaseId);
-
-        emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, msg.value, exchangeRate, date);
-    }
-
-    /**
-     * @notice Used to pay a rent using tokens NOT IMPLEMENTED YET
-     * @param _profileId The id of the owner
-     * @param _leaseId The id of the lease
-     * @param _rentId The id of the rent
-     * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
-     * @param _amountInSmallestDecimal amount in smallest token decimal
-     * @dev Only the registered tenant can call this function
-     */
-    function payFiatRentInToken(
-        uint256 _profileId,
-        uint256 _leaseId,
-        uint256 _rentId,
-        bool _withoutIssues,
-        uint256 _amountInSmallestDecimal
-    ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-        Lease memory lease = leases[_leaseId];
-        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
-        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
-
-        //TODO Will be implemented when exchangeRate switched to an index
-        //        require(lease.paymentData.exchangeRate == 'CRYPTO', "Lease: Rent is not set to crypto");
-
-        TransactionPayment memory rentPayment = lease.rentPayments[_rentId];
-
-        require(
-            rentPayment.paymentStatus != PaymentStatus.PAID ||
-                rentPayment.paymentStatus != PaymentStatus.CANCELLED ||
-                rentPayment.paymentStatus != PaymentStatus.CONFLICT,
-            "Payment is not pending"
-        );
-
-        IERC20 token = IERC20(lease.paymentData.paymentToken);
-
-        require(token.balanceOf(msg.sender) >= _amountInSmallestDecimal, "Not enough token balance");
-
-        (int256 exchangeRate, uint256 date) = rateOracle.getRate(lease.paymentData.currencyPair);
-        rentPayment.exchangeRate = exchangeRate;
-        rentPayment.exchangeRateTimestamp = date;
-
-        // exchangeRate: in tokenDecimal/Fiat | rentAmount in fiat currency
-        uint256 rentAmountInToken = lease.paymentData.rentAmount * (uint256(exchangeRate));
-
-        require(
-            _amountInSmallestDecimal >= (rentAmountInToken - (rentAmountInToken * slippage) / FEE_DIVIDER),
-            "Wrong rent value"
-        );
-        require(
-            _amountInSmallestDecimal <= (rentAmountInToken + (rentAmountInToken * slippage) / FEE_DIVIDER),
-            "Wrong rent value"
-        );
-
-        // Calculate Lease & Protocol fees
-        uint16 leaseFee = platformIdContract.getOriginLeaseFeeRate(lease.platformId);
-        uint256 leaseFeeAmount = (rentAmountInToken * leaseFee) / FEE_DIVIDER;
-        uint256 protocolFeeAmount = (rentAmountInToken * protocolFeeRate) / FEE_DIVIDER;
-
-        token.transferFrom(
-            msg.sender,
-            trustIdContract.ownerOf(lease.ownerId),
-            _amountInSmallestDecimal - (leaseFeeAmount + protocolFeeAmount)
-        );
-        token.transferFrom(msg.sender, protocolWallet, (protocolFeeAmount));
-        token.transferFrom(msg.sender, payable(platformIdContract.ownerOf(lease.platformId)), (leaseFeeAmount));
-
-        _validateRentPayment(_leaseId, _rentId, _withoutIssues);
-        _updateLeaseAndPaymentsStatuses(_leaseId);
-
-        emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
-    }
-
-    /**
      * @notice Can be called by the owner to mark a rent as not paid after the rent payment limit time is reached
      * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
@@ -740,7 +575,7 @@ contract Lease is AccessControl {
         uint256 _leaseId,
         uint256 _rentId
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+        isValid(_leaseId);
 
         Lease memory _lease = leases[_leaseId];
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
@@ -804,8 +639,7 @@ contract Lease is AccessControl {
         uint256 _leaseId,
         string calldata _reviewUri
     ) external onlyTrustOwner(_profileId) {
-        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
-
+        isValid(_leaseId);
         Lease storage lease = leases[_leaseId];
         require(_profileId == lease.ownerId || _profileId == lease.tenantId, "Lease: Not an actor of this lease");
         require(lease.status == LeaseStatus.ENDED, "Lease: Lease is still not finished");
@@ -823,20 +657,23 @@ contract Lease is AccessControl {
         }
     }
 
-    // =========================== Private functions ===========================
-
     /**
-     * @notice Private function to update the payment status & potential issues of a rent payment
+     * @notice Function to update the payment status & potential issues of a rent payment
      * @param _leaseId The id of the lease
      * @param _rentId The rent payment id
      * @param _withoutIssues "true" if the tenant had no issues with the rented property during this rent period
+     * @dev Only the payment manager contract can call this function
      */
-    function _validateRentPayment(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) private {
+    function validateRentPayment(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external onlyRole(PAYMENT_MANAGER_ROLE) {
         TransactionPayment storage rentPayment = leases[_leaseId].rentPayments[_rentId];
         rentPayment.paymentStatus = PaymentStatus.PAID;
         rentPayment.withoutIssues = _withoutIssues;
         rentPayment.validationDate = block.timestamp;
+
+        _updateLeaseAndPaymentsStatuses(_leaseId);
     }
+
+    // =========================== Private functions ===========================
 
     /**
      * @notice Private function to update the payment status of a rent payment
@@ -882,7 +719,7 @@ contract Lease is AccessControl {
         require(proposals[_leaseId][_profileId].ownerId != _profileId, "Lease: Proposal already submitted");
     }
 
-    // =========================== Events ==============================
+    // =============================== Events ==================================
 
     event LeaseCreated(
         uint256 leaseId,
@@ -911,17 +748,6 @@ contract Lease is AccessControl {
     event OpenProposalSubmitted(uint256 openProposalId, uint256 platformId, string cid);
 
     event RentPaymentIssueStatusUpdated(uint256 leaseId, uint256 rentId, bool withoutIssues);
-
-    event CryptoRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount);
-
-    event FiatRentPaid(
-        uint256 leaseId,
-        uint256 rentId,
-        bool withoutIssues,
-        uint256 amount,
-        int256 exchangeRate,
-        uint256 exchangeRateTimestamp
-    );
 
     event RentNotPaid(uint256 leaseId, uint256 rentId);
 
@@ -970,7 +796,7 @@ contract Lease is AccessControl {
     //     */
     //    modifier tenantCheck(uint256 _profileId, uint256 _leaseId) {
     //        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-    //        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+    //        isValid(_leaseId);
     //        Lease memory lease = leases[_leaseId];
     //        require(_profileId == lease.tenantId, "Lease: Only the tenant can call this function");
     //        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
@@ -985,7 +811,7 @@ contract Lease is AccessControl {
     //     */
     //    modifier ownerCheck(uint256 _profileId, uint256 _leaseId) {
     //        require(trustIdContract.ownerOf(_profileId) == msg.sender, "Lease: Not TrustId owner");
-    //        require(_leaseId <= _leaseIds.current(), "Lease: Lease does not exist");
+    //        isValid(_leaseId);
     //        Lease memory lease = leases[_leaseId];
     //        require(_profileId == lease.ownerId, "Lease: Only the owner can call this function");
     //        require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
