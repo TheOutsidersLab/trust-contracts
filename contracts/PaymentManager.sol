@@ -58,7 +58,7 @@ contract PaymentManager is AccessControl {
      */
     uint16 public protocolFeeRate;
 
-    constructor(address _trustIdContract, address _rateOracle, address _platformIdContract, address _leaseContract){
+    constructor(address _trustIdContract, address _rateOracle, address _platformIdContract, address _leaseContract) {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         trustIdContract = TrustId(_trustIdContract);
         //        rateOracle = FakeIexecOracle(_rateOracle);
@@ -114,8 +114,8 @@ contract PaymentManager is AccessControl {
 
         require(
             rentPayment.paymentStatus != ILease.PaymentStatus.PAID ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
+                rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
+                rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
             "Payment is not pending"
         );
 
@@ -178,8 +178,8 @@ contract PaymentManager is AccessControl {
 
         require(
             rentPayment.paymentStatus != ILease.PaymentStatus.PAID ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
+                rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
+                rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
             "Payment is not pending"
         );
 
@@ -237,8 +237,8 @@ contract PaymentManager is AccessControl {
 
         require(
             rentPayment.paymentStatus != ILease.PaymentStatus.PAID ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
-            rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
+                rentPayment.paymentStatus != ILease.PaymentStatus.CANCELLED ||
+                rentPayment.paymentStatus != ILease.PaymentStatus.CONFLICT,
             "Payment is not pending"
         );
 
@@ -279,7 +279,6 @@ contract PaymentManager is AccessControl {
 
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
     }
-
 
     // =============================== Events ==================================
 
