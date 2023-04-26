@@ -36,10 +36,7 @@ task('deploy', 'Deploys contracts')
 
     //Deploy Lease
     const Lease = await ethers.getContractFactory('Lease')
-    const leaseArgs: [string, string] = [
-      trustIdContract.address,
-      platformIdContract.address,
-    ]
+    const leaseArgs: [string, string] = [trustIdContract.address, platformIdContract.address]
     const leaseContract = await Lease.deploy(...leaseArgs)
     console.log('Lease address:', leaseContract.address)
 
@@ -91,15 +88,17 @@ task('deploy', 'Deploys contracts')
     // ********************* Contract Calls *************************
 
     // Grant PaymentManager Role to PaymentManager
-    let paymentManagerRole = await leaseContract.PAYMENT_MANAGER_ROLE();
-    await leaseContract.connect(deployer).grantRole(paymentManagerRole, paymentManagerContract.address)
+    const paymentManagerRole = await leaseContract.PAYMENT_MANAGER_ROLE()
+    await leaseContract
+      .connect(deployer)
+      .grantRole(paymentManagerRole, paymentManagerContract.address)
 
     // Mint PlatformIds
     const mintTxPlatformId = await platformIdContract.connect(deployer).mint('anywhere')
     await mintTxPlatformId.wait()
     const anywherePlatformId = await platformIdContract.ids(deployer.address)
     console.log('PlatformId: ', anywherePlatformId)
-    console.log('For platform: ', await platformIdContract.platforms(anywherePlatformId))
+    console.log('For platform: ', (await platformIdContract.platforms(anywherePlatformId))['1'])
 
     await paymentManagerContract.connect(deployer).updateProtocolWallet(deployer.address)
     await paymentManagerContract.connect(deployer).updateProtocolFeeRate(1000)
@@ -191,7 +190,9 @@ task('deploy', 'Deploys contracts')
 
     if (cryptoRent) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12)
-      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
+      await croesusToken
+        .connect(aurelius)
+        .approve(paymentManagerContract.address, totalAmountToApprove)
 
       //Create token lease
       const createLeaseTx = await leaseContract.connect(croesus).createLease(
@@ -284,7 +285,9 @@ task('deploy', 'Deploys contracts')
       console.log('Rent amount in token: ', rentAmountInToken.toString())
 
       const totalAmountToApprove = rentAmountInToken.mul(12)
-      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
+      await croesusToken
+        .connect(aurelius)
+        .approve(paymentManagerContract.address, totalAmountToApprove)
 
       for (let i = 0; i < 12; i++) {
         const payRentTx = await paymentManagerContract
@@ -308,7 +311,9 @@ task('deploy', 'Deploys contracts')
 
     if (fiatRentPaymentEth) {
       const totalAmountToApprove = ethers.utils.parseEther('0.0000000000005').mul(12)
-      await croesusToken.connect(aurelius).approve(paymentManagerContract.address, totalAmountToApprove)
+      await croesusToken
+        .connect(aurelius)
+        .approve(paymentManagerContract.address, totalAmountToApprove)
       const auralusId = await trustIdContract.ids(aurelius.address)
       console.log('Aurelius id ', auralusId)
 
@@ -482,8 +487,9 @@ task('deploy', 'Deploys contracts')
     console.log('**               In the "src/sub-graph" directory                          **')
     console.log('**                                                                         **')
     console.log(`**   TrustId address: ${trustIdContract.address}           **`)
+    console.log(`**   PlatformId address: ${platformIdContract.address}        **`)
     console.log(`**   LeaseId address: ${leaseContract.address}           **`)
-    console.log(`**   PaymentManager address: ${paymentManagerContract.address}           **`)
+    console.log(`**   PaymentManager address: ${paymentManagerContract.address}    **`)
     console.log('**                                                                         **')
     console.log('**                                                                         **')
     console.log('**                                                                         **')
