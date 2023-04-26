@@ -280,6 +280,7 @@ contract PaymentManager is AccessControl {
         emit FiatRentPaid(_leaseId, _rentId, _withoutIssues, _amountInSmallestDecimal, exchangeRate, date);
     }
 
+
     // =============================== Events ==================================
 
     event CryptoRentPaid(uint256 leaseId, uint256 rentId, bool withoutIssues, uint256 amount);

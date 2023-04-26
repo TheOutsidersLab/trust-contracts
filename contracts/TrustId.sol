@@ -119,7 +119,7 @@ contract TrustId is ERC721, Ownable {
     function updateLeaseContractAddress(address _leaseContractAddress) external onlyOwner {
         require(_leaseContractAddress != address(0), "UserId: lease contract address cannot be zero address");
         leastContractAddress = _leaseContractAddress;
-        //TODO add event here
+        emit LeaseContractAddressUpdated(_leaseContractAddress);
     }
 
     // =========================== Private functions ===========================
@@ -232,6 +232,12 @@ contract TrustId is ERC721, Ownable {
      * @param _newCid Content ID
      */
     event CidUpdated(uint256 indexed _tokenId, string _newCid);
+
+    /**
+     * Emit when lease contract address is updated.
+     * @param _leaseContractAddress New Lease contract address
+     */
+    event LeaseContractAddressUpdated(address indexed _leaseContractAddress);
 
     // =========================== Modifiers ==============================
 
