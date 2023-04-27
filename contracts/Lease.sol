@@ -145,6 +145,7 @@ contract Lease is AccessControl {
         uint256 startDate;
         uint256 platformId;
         string metaData;
+        ProposalStatus status;
     }
 
     /**
@@ -425,6 +426,7 @@ contract Lease is AccessControl {
             totalNumberOfRents: _totalNumberOfRents,
             startDate: _startDate,
             platformId: _platformId,
+            status: ProposalStatus.PENDING,
             metaData: _cid
         });
 
@@ -476,6 +478,9 @@ contract Lease is AccessControl {
         }
 
         lease.status = LeaseStatus.ACTIVE;
+        //TODO this should not work .... why can I write in a memory variable ?
+//        Proposal storage prop = tenantProposals[_leaseId][_tenantId];
+        proposal.status = ProposalStatus.ACCEPTED;
 
         emit ProposalValidated(_tenantId, proposal.totalNumberOfRents, proposal.startDate);
     }
@@ -491,9 +496,10 @@ contract Lease is AccessControl {
         proposal.totalNumberOfRents = _totalNumberOfRents;
         proposal.startDate = _startDate;
         proposal.metaData = _cid;
-        emit ProposalUpdated(_leaseId, _totalNumberOfRents, _startDate, _cid);
+        emit ProposalUpdated(_leaseId, _tenantId, _totalNumberOfRents, _startDate, _cid);
     }
 
+    //TODO ID not good... need a counter or smth
     function updateOpenProposal(uint256 _profileId, string calldata _cid) external {
         OpenProposal storage openProposal = openProposals[_profileId];
         openProposal.cid = _cid;
@@ -776,7 +782,7 @@ contract Lease is AccessControl {
         string metaData
     );
 
-    event ProposalUpdated(uint256 leaseId, uint8 totalNumberOfRents, uint256 startDate, string cid);
+    event ProposalUpdated(uint256 leaseId, uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate, string cid);
 
     event ProposalValidated(uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate);
 
