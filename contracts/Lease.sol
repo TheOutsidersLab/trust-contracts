@@ -482,7 +482,7 @@ contract Lease is AccessControl {
 //        Proposal storage prop = tenantProposals[_leaseId][_tenantId];
         proposal.status = ProposalStatus.ACCEPTED;
 
-        emit ProposalValidated(_tenantId, proposal.totalNumberOfRents, proposal.startDate);
+        emit ProposalValidated(_tenantId, _leaseId);
     }
 
     function updateProposal(
@@ -784,7 +784,7 @@ contract Lease is AccessControl {
 
     event ProposalUpdated(uint256 leaseId, uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate, string cid);
 
-    event ProposalValidated(uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate);
+    event ProposalValidated(uint256 tenantId, uint256 leaseId);
 
     event OpenProposalSubmitted(uint256 openProposalId, uint256 platformId, string cid);
 
