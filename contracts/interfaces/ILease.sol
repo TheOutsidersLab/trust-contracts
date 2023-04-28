@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
 /**
  * @title Lease Interface
  * @notice This contracts allows owners to create Leases & tenants to pay their rent.
@@ -113,9 +112,7 @@ interface ILease {
         string calldata _currencyPair,
         uint256 _startDate,
         uint256 _platformId
-    )
-    external
-    returns (uint256);
+    ) external returns (uint256);
 
     function submitProposal(
         uint256 _profileId,
@@ -126,45 +123,25 @@ interface ILease {
         string calldata _cid
     ) external;
 
-    function createOpenProposal(
-        uint256 _profileId,
-        uint256 _platformId,
-        string calldata _cid
-    ) external;
+    function createOpenProposal(uint256 _profileId, uint256 _platformId, string calldata _cid) external;
 
-    function validateProposal(
-        uint256 _profileId,
-        uint256 _tenantId,
-        uint256 _leaseId
-    ) external;
+    function validateProposal(uint256 _profileId, uint256 _tenantId, uint256 _leaseId) external;
 
     function updateProposal() external;
 
     function updateOpenProposal() external;
 
-    function updateLeaseMetaData(
-        uint256 _profileId,
-        uint256 _leaseId,
-        string memory _newCid
-    ) external;
+    function updateLeaseMetaData(uint256 _profileId, uint256 _leaseId, string memory _newCid) external;
 
     function declineLease(uint256 _profileId, uint256 _leaseId) external;
 
     function validateLease(uint256 _profileId, uint256 _leaseId) external;
 
-    function markRentAsNotPaid(
-        uint256 _profileId,
-        uint256 _leaseId,
-        uint256 _rentId
-    ) external;
+    function markRentAsNotPaid(uint256 _profileId, uint256 _leaseId, uint256 _rentId) external;
 
     function cancelLease(uint256 _profileId, uint256 _leaseId) external;
 
-    function reviewLease(
-        uint256 _profileId,
-        uint256 _leaseId,
-        string calldata _reviewUri
-    ) external;
+    function reviewLease(uint256 _profileId, uint256 _leaseId, string calldata _reviewUri) external;
 
     function validateRentPayment(uint256 _leaseId, uint256 _rentId, bool _withoutIssues) external;
 
