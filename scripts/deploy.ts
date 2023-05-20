@@ -11,6 +11,7 @@ task('deploy', 'Deploys contracts')
   .addFlag('cancelLease', 'Rents paid & not paid & lease is cancelled')
   .addFlag('openLease', 'OpenLease workflow')
   .setAction(async (taskArgs, { ethers, run }) => {
+    const cid = 'QmXtXJnM3FGD6q4unEo7A2RyXBrBrbQsr6MawEQAwiyN85'
     const { cryptoRent, cancelLease, fiatRentPaymentToken, fiatRentPaymentEth, openLease } =
       taskArgs
     const [deployer, croesus, brutus, maximus, aurelius] = await ethers.getSigners()
@@ -146,6 +147,7 @@ task('deploy', 'Deploys contracts')
         'CRYPTO',
         getCurrentTimestamp(),
         anywherePlatformId,
+        cid,
       )
       await createLeaseTx.wait()
       // console.log('Lease created: ', await leaseContract.leases(1))
@@ -206,6 +208,7 @@ task('deploy', 'Deploys contracts')
         'CRYPTO',
         getCurrentTimestamp(),
         anywherePlatformId,
+        cid,
       )
       await createLeaseTx.wait()
       leaseIdCounter++
@@ -262,6 +265,7 @@ task('deploy', 'Deploys contracts')
           'USD-SHI',
           getCurrentTimestamp(),
           anywherePlatformId,
+          cid,
         )
       await createLeaseTx.wait()
       leaseIdCounter++
@@ -330,6 +334,7 @@ task('deploy', 'Deploys contracts')
           'USD-ETH',
           getCurrentTimestamp(),
           anywherePlatformId,
+          cid,
         )
       await createLeaseTx.wait()
       leaseIdCounter++
@@ -409,6 +414,7 @@ task('deploy', 'Deploys contracts')
         'CRYPTO',
         getCurrentTimestamp(),
         anywherePlatformId,
+        cid,
       )
       await createOpenLeaseTx.wait()
       leaseIdCounter++

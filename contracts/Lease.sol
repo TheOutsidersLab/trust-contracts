@@ -65,28 +65,32 @@ contract Lease is AccessControl {
     /**
      * @notice Struct for a lease with price
      * @param ownerId The id of the owner
-     * @param tenantId The id of the tenant
+     * @param tenantId The id of the tenant | Value is empty for open leases
      * @param paymentData The rent payment related data
-     * @param totalNumberOfRents The amount of rent payments for the lease
+     * @param totalNumberOfPayments The amount of rent payments for the lease
+     * @param cancelledByOwner Owner cancellation signature
+     * @param cancelledByTenant Tenant cancellation signature
      * @param reviewStatus Review-related data
-     * @param rentPaymentInterval The minimum interval between each rent payment
+     * @param paymentInterval The minimum interval between each rent payment
      * @param startDate The start date of the lease
      * @param cancellation Lease cancellation related data
      * @param rentPayments Array of all the rent payments of the lease
-     * @param metaData Metadata of the lease
+     * @param cid Metadata of the lease
      * @param platformId The id of the platform on which the Lease was created
      * @param proposalId In case of an Open Lease or Open Proposal, the id of the proposal linked to the lease. 0 if no proposal.
      */
+    //TODO pack variables and reduce size for interval, dates (bytes7 ?)
     struct Lease {
         uint256 ownerId;
         uint256 tenantId;
-        uint8 totalNumberOfRents;
-        uint256 rentPaymentInterval;
+        uint8 totalNumberOfPayments;
+        bool cancelledByOwner;
+        bool cancelledByTenant;
+        uint256 paymentInterval;
         uint256 startDate;
-        string metaData;
+        string cid;
         PaymentData paymentData;
         ReviewStatus reviewStatus;
-        Cancellation cancellation;
         LeaseStatus status;
         TransactionPayment[] rentPayments;
         uint256 platformId;
@@ -106,16 +110,16 @@ contract Lease is AccessControl {
         string currencyPair;
     }
 
-    /**
-     * @notice Struct for cancellation. When both params are true, all pending payments are cancelled and
-     * the lease is ended
-     * @param cancelledByOwner Owner cancellation signature
-     * @param cancelledByTenant Tenant cancellation signature
-     */
-    struct Cancellation {
-        bool cancelledByOwner;
-        bool cancelledByTenant;
-    }
+//    /**
+//     * @notice Struct for cancellation. When both params are true, all pending payments are cancelled and
+//     * the lease is ended
+//     * @param cancelledByOwner Owner cancellation signature
+//     * @param cancelledByTenant Tenant cancellation signature
+//     */
+//    struct Cancellation {
+//        bool cancelledByOwner;
+//        bool cancelledByTenant;
+//    }
 
     /**
      * @notice Struct representing review-related data
@@ -134,17 +138,17 @@ contract Lease is AccessControl {
     /**
      * @notice Struct for a proposal
      * @param ownerId The id of the profile
-     * @param totalNumberOfRents The amount of rent payments for the lease
+     * @param totalNumberOfPayments The amount of rent payments for the lease
      * @param startDate The start date of the lease
      * @param platformId The id of the platform on which the Proposal was created
-     * @param metaData Metadata of the proposal
+     * @param cid Metadata of the proposal
      */
     struct Proposal {
         uint256 ownerId;
-        uint8 totalNumberOfRents;
+        uint8 totalNumberOfPayments;
         uint256 startDate;
         uint256 platformId;
-        string metaData;
+        string cid;
         ProposalStatus status;
     }
 
@@ -153,7 +157,7 @@ contract Lease is AccessControl {
      * @param ownerId The id of the proposal owner
      * @param status The status of the proposal
      * @param platformId The id of the platform on which the Proposal was created
-     * @param cid The IPFS cid of the proposal's metadata
+     * @param cid The IPFS cid of the proposal's cid
      */
     struct OpenProposal {
         uint256 ownerId;
@@ -273,9 +277,9 @@ contract Lease is AccessControl {
      * @param _ownerId The id of the owner
      * @param _tenantId The id of the tenant
      * @param _rentAmount The amount of the rent in fiat
-     * @param _totalNumberOfRents The amount of rent payments for the lease
+     * @param _totalNumberOfPayments The amount of rent payments for the lease
      * @param _paymentToken The address of the token used for payment
-     * @param _rentPaymentInterval The minimum interval between each rent payment
+     * @param _paymentInterval The minimum interval between each rent payment
      * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
      * @param _startDate The start date of the lease
      */
@@ -284,21 +288,22 @@ contract Lease is AccessControl {
         uint256 _ownerId,
         uint256 _tenantId,
         uint256 _rentAmount,
-        uint8 _totalNumberOfRents,
+        uint8 _totalNumberOfPayments,
         address _paymentToken,
-        uint256 _rentPaymentInterval,
+        uint256 _paymentInterval,
         string calldata _currencyPair,
         uint256 _startDate,
-        uint256 _platformId
+        uint256 _platformId,
+        string calldata _cid
     ) external onlyTrustOwner(_ownerId) returns (uint256 leaseId) {
         Lease storage lease = leases[_leaseIds.current()];
         lease.ownerId = _ownerId;
         lease.tenantId = _tenantId;
         lease.paymentData.rentAmount = _rentAmount;
-        lease.totalNumberOfRents = _totalNumberOfRents;
+        lease.totalNumberOfPayments = _totalNumberOfPayments;
         lease.paymentData.paymentToken = _paymentToken;
         lease.paymentData.currencyPair = _currencyPair;
-        lease.rentPaymentInterval = _rentPaymentInterval;
+        lease.paymentInterval = _paymentInterval;
         lease.startDate = _startDate;
         lease.status = LeaseStatus.PENDING;
         lease.platformId = _platformId;
@@ -307,11 +312,11 @@ contract Lease is AccessControl {
             _leaseIds.current(),
             _tenantId,
             lease.ownerId,
-            _totalNumberOfRents,
+            _totalNumberOfPayments,
             _startDate,
-            _rentPaymentInterval,
-            _platformId
-            //            "cid"
+            _paymentInterval,
+            _platformId,
+            _cid
         );
 
         emit LeasePaymentDataUpdated(_leaseIds.current(), _rentAmount, _paymentToken, _currencyPair);
@@ -328,9 +333,9 @@ contract Lease is AccessControl {
     //     * @param _ownerId The id of the owner
     //     * @param _tenantId The id of the tenant
     //     * @param _rentAmount The amount of the rent in fiat
-    //     * @param _totalNumberOfRents The amount of rent payments for the lease
+    //     * @param _totalNumberOfPayments The amount of rent payments for the lease
     //     * @param _paymentToken The address of the token used for payment
-    //     * @param _rentPaymentInterval The minimum interval between each rent payment
+    //     * @param _paymentInterval The minimum interval between each rent payment
     //     * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
     //     * @param _startDate The start date of the lease
     //     */
@@ -339,9 +344,9 @@ contract Lease is AccessControl {
         //            _leaseId,
         //            _tenantId,
         //            _ownerId,
-        //            _totalNumberOfRents,
+        //            _totalNumberOfPayments,
         //            _startDate,
-        //            _rentPaymentInterval,
+        //            _paymentInterval,
         //            _platformId,
         //            "cid"
         //        );
@@ -350,38 +355,38 @@ contract Lease is AccessControl {
     /**
      * @notice Function called by the owner to create a new open lease
      * @param _profileId The id of the owner
-     * @param _rentAmount The amount of the rent in fiat
+     * @param _paymentAmount The amount of the rent in fiat
      * @param _paymentToken The address of the token used for payment
-     * @param _rentPaymentInterval The minimum interval between each rent payment
+     * @param _paymentInterval The minimum interval between each rent payment
      * @param _currencyPair The currency pair used for rent price & payment | "CRYPTO" if rent in token or ETH
      * @param _startDate The start date of the lease
      */
     function createOpenLease(
         uint256 _profileId,
-        uint256 _rentAmount,
+        uint256 _paymentAmount,
         address _paymentToken,
-        uint256 _rentPaymentInterval,
+        uint256 _paymentInterval,
         string calldata _currencyPair,
         uint256 _startDate,
-        uint256 _platformId
+        uint256 _platformId,
+        string calldata _cid
     )
         external
-        //        string calldata _metaData
         onlyTrustOwner(_profileId)
         returns (uint256)
     {
         Lease storage lease = leases[_leaseIds.current()];
         lease.ownerId = _profileId;
         lease.tenantId = 0;
-        lease.paymentData.rentAmount = _rentAmount;
-        lease.totalNumberOfRents = 0;
+        lease.paymentData.rentAmount = _paymentAmount;
+        lease.totalNumberOfPayments = 0;
         lease.paymentData.paymentToken = _paymentToken;
         lease.paymentData.currencyPair = _currencyPair;
-        lease.rentPaymentInterval = _rentPaymentInterval;
+        lease.paymentInterval = _paymentInterval;
         lease.startDate = _startDate;
         lease.status = LeaseStatus.PENDING;
         lease.platformId = _platformId;
-        //        lease.metaData = _metaData;
+        lease.cid = _cid;
 
         emit LeaseCreated(
             _leaseIds.current(),
@@ -389,12 +394,12 @@ contract Lease is AccessControl {
             _profileId,
             0,
             _startDate,
-            _rentPaymentInterval,
-            _platformId
-            //            _metaData
+            _paymentInterval,
+            _platformId,
+            _cid
         );
 
-        emit LeasePaymentDataUpdated(_leaseIds.current(), _rentAmount, _paymentToken, _currencyPair);
+        emit LeasePaymentDataUpdated(_leaseIds.current(), _paymentAmount, _paymentToken, _currencyPair);
 
         uint256 leaseId = _leaseIds.current();
         _leaseIds.increment();
@@ -406,15 +411,15 @@ contract Lease is AccessControl {
      * @notice Function called by a tenant to create a proposal for an open lease
      * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
-     * @param _totalNumberOfRents The amount of rent payments for the lease
+     * @param _totalNumberOfPayments The amount of rent payments for the lease
      * @param _startDate The start date of the lease
      * @param _platformId The id of the platform on which the proposal was created
-     * @param _cid The cid of the metadata
+     * @param _cid The cid of the cid
      */
     function submitProposal(
         uint256 _profileId,
         uint256 _leaseId,
-        uint8 _totalNumberOfRents,
+        uint8 _totalNumberOfPayments,
         uint256 _startDate,
         uint256 _platformId,
         string calldata _cid
@@ -423,20 +428,20 @@ contract Lease is AccessControl {
 
         tenantProposals[_leaseId][_profileId] = Proposal({
             ownerId: _profileId,
-            totalNumberOfRents: _totalNumberOfRents,
+            totalNumberOfPayments: _totalNumberOfPayments,
             startDate: _startDate,
             platformId: _platformId,
             status: ProposalStatus.PENDING,
-            metaData: _cid
+            cid: _cid
         });
 
-        emit ProposalSubmitted(_leaseId, _profileId, _totalNumberOfRents, _startDate, _platformId, _cid);
+        emit ProposalSubmitted(_leaseId, _profileId, _totalNumberOfPayments, _startDate, _platformId, _cid);
     }
 
     /**
      * @notice Function called by a potential tenant to create a new open proposal
      * @param _profileId The id of the proposal maker
-     * @param _cid The cid of the metadata with the proposal details
+     * @param _cid The cid of the cid with the proposal details
      */
     function createOpenProposal(
         uint256 _profileId,
@@ -468,12 +473,12 @@ contract Lease is AccessControl {
         Proposal memory proposal = tenantProposals[_leaseId][_tenantId];
 
         lease.tenantId = proposal.ownerId;
-        lease.totalNumberOfRents = proposal.totalNumberOfRents;
+        lease.totalNumberOfPayments = proposal.totalNumberOfPayments;
         lease.startDate = proposal.startDate;
         lease.proposalId = _tenantId;
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
-        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        for (uint8 i = 0; i < lease.totalNumberOfPayments; i++) {
             lease.rentPayments.push(TransactionPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
@@ -488,15 +493,15 @@ contract Lease is AccessControl {
     function updateProposal(
         uint256 _tenantId,
         uint256 _leaseId,
-        uint8 _totalNumberOfRents,
+        uint8 _totalNumberOfPayments,
         uint256 _startDate,
         string calldata _cid
     ) external {
         Proposal storage proposal = tenantProposals[_leaseId][_tenantId];
-        proposal.totalNumberOfRents = _totalNumberOfRents;
+        proposal.totalNumberOfPayments = _totalNumberOfPayments;
         proposal.startDate = _startDate;
-        proposal.metaData = _cid;
-        emit ProposalUpdated(_leaseId, _tenantId, _totalNumberOfRents, _startDate, _cid);
+        proposal.cid = _cid;
+        emit ProposalUpdated(_leaseId, _tenantId, _totalNumberOfPayments, _startDate, _cid);
     }
 
     //TODO ID not good... need a counter or smth
@@ -507,10 +512,10 @@ contract Lease is AccessControl {
     }
 
     /**
-     * @notice Called by the tenant to update the lease metadata
+     * @notice Called by the tenant to update the lease cid
      * @param _profileId The id of the owner
      * @param _leaseId The id of the lease
-     * @param _newCid The new IPFS URI of the lease metadata
+     * @param _newCid The new IPFS URI of the lease cid
      */
     function updateLeaseMetaData(
         uint256 _profileId,
@@ -520,7 +525,7 @@ contract Lease is AccessControl {
         require(bytes(_newCid).length == 46, "Lease: Invalid cid");
 
         Lease storage lease = leases[_leaseId];
-        lease.metaData = _newCid;
+        lease.cid = _newCid;
 
         emit LeaseMetaDataUpdated(_leaseId, _newCid);
     }
@@ -556,7 +561,7 @@ contract Lease is AccessControl {
         require(lease.status == LeaseStatus.PENDING, "Lease: Lease is not pending");
 
         //Rent id starts at 0 as it will be the multiplicator for the Payment Intervals
-        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        for (uint8 i = 0; i < lease.totalNumberOfPayments; i++) {
             lease.rentPayments.push(TransactionPayment(0, false, 0, 0, PaymentStatus.PENDING));
         }
 
@@ -600,7 +605,7 @@ contract Lease is AccessControl {
         require(_lease.ownerId == _profileId, "Lease: Only the owner can perform this action");
         require(_lease.status == LeaseStatus.ACTIVE, "Lease: Lease is not Active");
         require(
-            block.timestamp > _lease.startDate + _lease.rentPaymentInterval + _lease.rentPaymentInterval * _rentId,
+            block.timestamp > _lease.startDate + _lease.paymentInterval + _lease.paymentInterval * _rentId,
             "Lease: Tenant still has time to pay"
         );
 
@@ -624,17 +629,17 @@ contract Lease is AccessControl {
         require(lease.status == LeaseStatus.ACTIVE, "Lease is not Active");
 
         if (_profileId == lease.ownerId) {
-            require(lease.cancellation.cancelledByOwner == false, "Lease already cancelled by owner");
-            lease.cancellation.cancelledByOwner = true;
+            require(lease.cancelledByOwner == false, "Lease already cancelled by owner");
+            lease.cancelledByOwner = true;
         } else {
-            require(lease.cancellation.cancelledByTenant == false, "Lease already cancelled by tenant");
-            lease.cancellation.cancelledByTenant = true;
+            require(lease.cancelledByTenant == false, "Lease already cancelled by tenant");
+            lease.cancelledByTenant = true;
         }
 
-        emit CancellationRequested(_leaseId, lease.cancellation.cancelledByOwner, lease.cancellation.cancelledByTenant);
+        emit CancellationRequested(_leaseId, lease.cancelledByOwner, lease.cancelledByTenant);
 
-        if (lease.cancellation.cancelledByOwner && lease.cancellation.cancelledByTenant) {
-            for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        if (lease.cancelledByOwner && lease.cancelledByTenant) {
+            for (uint8 i = 0; i < lease.totalNumberOfPayments; i++) {
                 TransactionPayment storage rentPayment = lease.rentPayments[i];
                 if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                     //TODO add here the logic to mark as NOT_PAID the overdue rent payments ?
@@ -720,7 +725,7 @@ contract Lease is AccessControl {
     function _updateLeaseStatus(uint256 _leaseId) private {
         Lease storage lease = leases[_leaseId];
 
-        for (uint8 i = 0; i < lease.totalNumberOfRents; i++) {
+        for (uint8 i = 0; i < lease.totalNumberOfPayments; i++) {
             TransactionPayment storage rentPayment = lease.rentPayments[i];
             if (rentPayment.paymentStatus == PaymentStatus.PENDING) {
                 return;
@@ -751,22 +756,21 @@ contract Lease is AccessControl {
         uint256 leaseId,
         uint256 tenantId,
         uint256 ownerId,
-        uint8 totalNumberOfRents,
+        uint8 totalNumberOfPayments,
         uint256 startDate,
-        uint256 rentPaymentInterval,
-        uint256 platformId
-        //        string metadata
+        uint256 paymentInterval,
+        uint256 platformId,
+        string cid
     );
 
     event LeaseUpdated(
         uint256 leaseId,
         uint256 tenantId,
         uint256 ownerId,
-        uint8 totalNumberOfRents,
+        uint8 totalNumberOfPayments,
         uint256 startDate,
-        uint256 rentPaymentInterval,
-    //TODO change to cid
-        string metadata
+        uint256 paymentInterval,
+        string cid
     );
 
     event LeasePaymentDataUpdated(uint256 leaseId, uint256 rentAmount, address paymentToken, string currencyPair);
@@ -776,13 +780,13 @@ contract Lease is AccessControl {
     event ProposalSubmitted(
         uint256 leaseId,
         uint256 tenantId,
-        uint8 totalNumberOfRents,
+        uint8 totalNumberOfPayments,
         uint256 startDate,
         uint256 platformId,
-        string metaData
+        string cid
     );
 
-    event ProposalUpdated(uint256 leaseId, uint256 tenantId, uint8 totalNumberOfRents, uint256 startDate, string cid);
+    event ProposalUpdated(uint256 leaseId, uint256 tenantId, uint8 totalNumberOfPayments, uint256 startDate, string cid);
 
     event ProposalValidated(uint256 tenantId, uint256 leaseId);
 
@@ -802,7 +806,7 @@ contract Lease is AccessControl {
 
     event LeaseReviewedByOwner(uint256 leaseId, string reviewUri);
 
-    event LeaseMetaDataUpdated(uint256 leaseId, string metaData);
+    event LeaseMetaDataUpdated(uint256 leaseId, string cid);
 
     // =========================== Modifiers ==============================
 
