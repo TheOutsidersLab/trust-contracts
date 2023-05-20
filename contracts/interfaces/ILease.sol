@@ -32,13 +32,14 @@ interface ILease {
     struct Lease {
         uint256 ownerId;
         uint256 tenantId;
-        uint8 totalNumberOfRents;
-        uint256 rentPaymentInterval;
+        uint8 totalNumberOfPayments;
+        bool cancelledByOwner;
+        bool cancelledByTenant;
+        uint256 paymentInterval;
         uint256 startDate;
-        string metaData;
+        string cid;
         PaymentData paymentData;
         ReviewStatus reviewStatus;
-        Cancellation cancellation;
         LeaseStatus status;
         TransactionPayment[] rentPayments;
         uint256 platformId;
@@ -49,11 +50,6 @@ interface ILease {
         uint256 rentAmount;
         address paymentToken;
         string currencyPair;
-    }
-
-    struct Cancellation {
-        bool cancelledByOwner;
-        bool cancelledByTenant;
     }
 
     struct ReviewStatus {
